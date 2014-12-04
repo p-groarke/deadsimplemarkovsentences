@@ -34,17 +34,28 @@
 
 #include <fstream>
 #include <iostream>
-#include <list>
 #include <map>
 #include <memory>
-#include <set>
-#include <utility>
 #include <vector>
+
+#include "loadandsave.hpp"
+#include "readstdin.hpp"
+#include "word.hpp"
 
 using namespace std;
 
 
-struct Word;
+
+//// CONSTs i& globals ////
+
+int markovLength = 3;
+
+
+
+//// FUNCTORS ////
+
+
+
 struct orderByWeight {
         bool operator()(pair<string, unique_ptr<Word> >& w1,
                         pair<string, unique_ptr<Word>>& w2) const;
@@ -53,106 +64,15 @@ struct orderByWeight {
 bool markovWeightOrdering (unique_ptr<Word>& w1, const unique_ptr<Word>& w2);
 bool alphabetOrder (const unique_ptr<Word>& w1, const unique_ptr<Word>& w2);
 
-
-//// CLASSES ////
-
-
-struct Word {
-        Word() : word_(""), weight_(1) {}
-        Word(const string& txt) :
-                word_(txt), weight_(1) {}
-
-        void outputTopSentence() {
-                if (chain_.size() > 0) {
-                        cout << word_ << " ";
-                        int i = 0;
-                        for (auto& x : chain_) {
-                                x.second->outputTopSentence();
-                                ++i;
-                                if (i == 10)
-                                        break;
-                        }
-                }
-        }
-
-        void addWordInChain(list<unique_ptr<Word> >& wl) {
-                if (wl.size() <= 0)
-                    return;
-
-                auto ret = chain_.insert(
-                        pair<string, unique_ptr<Word> >(
-                                wl.front()->word_, move(wl.front())));
-
-                if (ret.second == false) {
-                        ret.first->second->weight_++;
-                }
-                wl.pop_front();
-                ret.first->second->addWordInChain(wl);
-        }
-
-        void printInfo(int indent = 0) {
-                for (int i = 0; i < indent; ++i)
-                        cout << " ";
-
-                cout << "\"" << word_ << "\" " << weight_ << endl;
-
-                for (auto& x : chain_) {
-                        x.second->printInfo(indent + 1);
-                }
-        }
-
-        friend ostream& operator<<(ostream& os, const Word& w) {
-                os << w.word_ << endl << w.weight_ << endl;
-                os << w.characteristics_.size() << endl;
-                for (auto& x : w.characteristics_) {
-                        os << x << endl;
-                }
-
-                os << w.chain_.size() << endl;
-                for (auto& x : w.chain_) {
-                        os << x.first << endl << *x.second;
-                }
-                return os;
-        }
-
-        friend istream& operator>>(istream& is, Word& w) {
-                is >> w.word_ >> w.weight_;
-                size_t size;
-                is >> size;
-                for (int i = 0; i < size; ++i) {
-                        string c;
-                        is >> c;
-                        w.characteristics_.push_back(c);
-                }
-
-                is >> size;
-                for (int i = 0; i < size; ++i) {
-                        string key;
-                        unique_ptr<Word> temp(new Word());
-                        is >> key >> *temp;
-                        w.chain_.insert(
-                                pair<string, unique_ptr<Word> >(key, move(temp)));
-                }
-
-                return is;
-        }
-
-        map<string, unique_ptr<Word> > chain_;
-        vector<string> characteristics_;
-
-        string word_;
-        int weight_ = 1;
-
-};
-
-
-//// FUNCTORS ////
-
-
 bool orderByWeight::operator()(pair<string, unique_ptr<Word> >& w1,
                         pair<string, unique_ptr<Word>>& w2) const
 {
         return w1.second->weight_ > w2.second->weight_;
+}
+
+bool listOrderByWeight(unique_ptr<Word>& w1, unique_ptr<Word>& w2)
+{
+        return w1->weight_ > w2->weight_;
 }
 
 // w2 will be removed if true
@@ -175,49 +95,9 @@ bool alphabetOrder (const unique_ptr<Word>& w1, const unique_ptr<Word>& w2) {
 }
 
 
-//// UTILITIES ////
 
+//// MAIN ////
 
-unique_ptr<map<string, unique_ptr<Word> > > loadFile(string f = "data.txt")
-{
-        unique_ptr<map<string, unique_ptr<Word> > > myMap(
-                        new map<string, unique_ptr<Word> >);
-        ifstream ifs;
-        ifs.open(f, ios::in | ios::binary);
-
-        if (!ifs.is_open())
-                return move(myMap);
-
-        size_t mapSize = 0;
-        ifs >> mapSize;
-        cout << "Main map size: " << mapSize << endl;
-
-        for (int i = 0; i < mapSize; ++i) {
-                string tempKey;
-                unique_ptr<Word> tempWord(new Word());
-                ifs >> tempKey >> *tempWord;
-                myMap->insert(
-                        pair<string, unique_ptr<Word> >(tempKey, move(tempWord)));
-        }
-
-        //for (auto& x : *myMap)
-        //        x.second->printInfo();
-        return move(myMap);
-}
-
-void save(unique_ptr<map<string, unique_ptr<Word> > >& l)
-{
-        ofstream ofs;
-        ofs.open("data.txt", ios::out | ios::binary);
-
-        if (!ofs.is_open())
-                return;
-
-        ofs << l->size() << endl;
-        for (auto& x : *l) {
-                ofs << x.first << endl << *x.second;
-        }
-}
 
 
 void outputHelp()
@@ -228,79 +108,9 @@ void outputHelp()
              << "#####################################" << endl << endl
              << "Philippe Groarke <philippe.groarke@gmail.com>" << endl << endl
              << "--save     Input text using stdin." << endl
-             << "--load     Load saved database." << endl << endl;
-}
-
-
-bool isEndOfSentence(unique_ptr<Word>& w)
-{
-        if (w->word_.find(".") != string::npos ||
-            w->word_.find("!") != string::npos ||
-            w->word_.find("?") != string::npos)
-                return true;
-        return false;
-}
-
-
-//// MAIN ////
-
-
-void readSTDIN(unique_ptr<map<string, unique_ptr<Word> > >& myMap)
-{
-        cout << "Enter text (use ctrl+D to stop)." << endl;
-
-	string userText;
-        list<unique_ptr<Word> > hugeAssWordList_;
-
-        // Get input.
-	while (cin >> userText) {
-                hugeAssWordList_.push_back(unique_ptr<Word>(new Word(userText)));
-	}
-
-        // Chop everything up in vectors (sentences) of length n.
-        // Then, when a sentence end is detected, construct recursively the
-        // chain.
-        for (auto x = hugeAssWordList_.begin(); x != hugeAssWordList_.end();) {
-                list<unique_ptr<Word> > temp;
-                while(!isEndOfSentence(*x)) {
-                        cout << (*x)->word_ << endl;
-                        temp.push_back(move(*x));
-                        ++x;
-                        //hugeAssWordList_.erase(x++);
-                        if (x == hugeAssWordList_.end())
-                                break;
-                }
-                if (x != hugeAssWordList_.end()) {
-                        cout << "End of sentence detected: " << (*x)->word_ << endl;
-                        temp.push_back(move(*x));
-                        ++x;
-                }
-                //hugeAssWordList_.erase(x++);
-
-                unique_ptr<Word> wt = move(temp.front());
-                temp.pop_front();
-
-                auto ret = myMap->insert(
-                        pair<string, unique_ptr<Word> >(wt->word_, move(wt)));
-
-                if (ret.second == false) {
-                        ret.first->second->weight_++;
-                }
-
-                ret.first->second->addWordInChain(temp);
-        }
-        // Debug output of root tree.
-        for (auto& x : *myMap)
-                x.second->printInfo();
-
-        // Save the list to the database.
-        save(myMap);
-}
-
-
-unique_ptr<map<string, unique_ptr<Word> > > loadData()
-{
-        return loadFile();
+             << "    --markov [n]    n = length of chains (default 3)." << endl
+             << "--load     Load saved database." << endl
+             << endl;
 }
 
 int main (int argc, char ** argv)
@@ -320,14 +130,27 @@ int main (int argc, char ** argv)
                         return 0;
                 }
                 if ((string)argv[i] == "--load") {
-                        mainWordList_ = loadData();
+                        mainWordList_ = loadFile();
+                }
+                if ((string)argv[i] == "--markov") {
+                        markovLength = atoi(argv[++i]);
+                        cout << "Markov length is: " << markovLength << endl;
                 }
         }
 
-        int i = 0;
+        list<unique_ptr<Word> > sortedByWeight;
         for (auto& x : *mainWordList_) {
-                x.second->outputTopSentence();
-                cout << endl;
+                unique_ptr<Word> temp(new Word(*x.second));
+                sortedByWeight.push_back(move(temp));
+        }
+
+        sortedByWeight.sort(listOrderByWeight);
+
+        cout << "Top sentences" << endl;
+        int i = 0;
+        for (auto& x : sortedByWeight) {
+                x->outputTopSentence();
+                cout << "   (" << x->weight_ << ")" << endl;
                 ++i;
                 if (i == 10)
                         break;
