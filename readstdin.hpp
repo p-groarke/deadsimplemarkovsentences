@@ -68,15 +68,16 @@ void readSTDIN(unique_ptr<map<string, unique_ptr<Word> > >& myMap, int markovLen
                 if (currentRead + markovLength > hugeAssWordList_.size())
                         break;
 
+                cout << (*x)->word_ << endl;
                 // Create a temporary list of n words (n == markov chain length)
                 auto y = x;
                 for (int i = 0; i < markovLength; ++i) {
                         if (i == 0) {
                                 temp.push_back(move(*x));
                                 ++y;
-                                ++x;
                         } else {
                                 temp.push_back(unique_ptr<Word>(new Word(**y)));
+                                cout << (*y)->word_ << endl;
                                 ++y;
                         }
                 }
@@ -94,7 +95,7 @@ void readSTDIN(unique_ptr<map<string, unique_ptr<Word> > >& myMap, int markovLen
                 ret.first->second->addWordInChain(temp);
 
                 ++currentRead;
-
+                ++x;
         }
         // Debug output of root tree.
         for (auto& x : *myMap)

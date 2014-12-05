@@ -29,9 +29,10 @@
  */
 
 /*
- * This software builds markov chains of length n, the length of sentences.
+ * This software builds markov chains of length n.
  */
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -126,7 +127,11 @@ int main (int argc, char ** argv)
                         return 0;
                 }
                 if ((string)argv[i] == "--save") {
-                        readSTDIN(mainWordList_);
+                        if ((string)argv[++i] == "--markov") {
+                                markovLength = atoi(argv[++i]);
+                                cout << "Markov length is: " << markovLength << endl;
+                        }
+                        readSTDIN(mainWordList_, markovLength);
                         return 0;
                 }
                 if ((string)argv[i] == "--load") {
@@ -149,7 +154,27 @@ int main (int argc, char ** argv)
         cout << "Top sentences" << endl;
         int i = 0;
         for (auto& x : sortedByWeight) {
-                x->outputTopSentence();
+                // Only pick the first word with a capital letter.
+                if (!isupper(x->word_[0]))
+                        continue;
+
+                vector<string> sentence;
+                x->outputTopSentence(sentence);
+
+                while (!isEndOfSentence(sentence.back()))
+                {
+                        int beforeLast = sentence.size() - (markovLength - 1);
+                        auto temp = mainWordList_->find(sentence[beforeLast]);
+                        if (temp != mainWordList_->end()) {
+                                sentence.push_back(temp->second->getWord(
+                                        sentence.back())->topWord()->word_);
+                        } else {
+                                break;
+                        }
+                }
+
+                for (auto x : sentence)
+                        cout << x << " ";
                 cout << "   (" << x->weight_ << ")" << endl;
                 ++i;
                 if (i == 10)

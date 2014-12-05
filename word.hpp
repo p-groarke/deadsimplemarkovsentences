@@ -31,12 +31,23 @@
 #ifndef WORD_H
 #define WORD_H
 
+#include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <list>
 #include <map>
 #include <vector>
 
 using namespace std;
+
+bool isEndOfSentence(const string& w)
+{
+        if (w.find(".") != string::npos ||
+            w.find("!") != string::npos ||
+            w.find("?") != string::npos)
+                return true;
+        return false;
+}
 
 struct Word {
         Word() : word_(""), weight_(1) {}
@@ -53,18 +64,30 @@ struct Word {
         Word(const string& txt) :
                 word_(txt), weight_(1) {}
 
-        void outputTopSentence() {
-                cout << word_ << " ";
+        // Stop at end of sentence
+        void outputTopSentence(vector<string>& vec) {
                 Word* topWord = new Word();
                 topWord->weight_ = 0;
 
+                vec.push_back(word_);
                 if (chain_.size() > 0) {
+                        //cout << word_ << " ";
+
                         for (auto& x : chain_) {
                                 if (x.second->weight_ > topWord->weight_)
                                         topWord = new Word(*x.second);
                         }
-                        topWord->outputTopSentence();
-                }
+
+                        // Check if we have reached the end of a sentence.
+                        if (isEndOfSentence(topWord->word_)) {
+                                vec.push_back(topWord->word_);
+                                return;
+                        } else {
+                                topWord->outputTopSentence(vec);
+                        }
+                } /*else {
+                        return word_;
+                }*/
         }
 
         void addWordInChain(list<unique_ptr<Word> >& wl) {
@@ -91,6 +114,37 @@ struct Word {
                 for (auto& x : chain_) {
                         x.second->printInfo(indent + 1);
                 }
+        }
+
+        unique_ptr<Word>& getWord(const string& key) {
+                return chain_.at(key);
+        }
+
+        unique_ptr<Word> topWord() {
+                vector<unique_ptr<Word> > sortedByWeight;
+                for (auto& x : chain_) {
+                        unique_ptr<Word> temp(new Word(*x.second));
+                        sortedByWeight.push_back(move(temp));
+                }
+
+                sort(sortedByWeight.begin(), sortedByWeight.end(), [](unique_ptr<Word>& w1,
+                        unique_ptr<Word>& w2) -> bool {
+                        return w1->weight_ > w2->weight_;
+                });
+
+                unique_ptr<Word> topWord(new Word());
+                topWord->weight_ = 0;
+
+                if (chain_.size() <= 0)
+                        return topWord;
+
+                int top = rand() % 10;
+                if (sortedByWeight.size() < 10)
+                        top = rand() % sortedByWeight.size();
+
+                topWord.reset(new Word(*sortedByWeight[top]));
+
+                return topWord;
         }
 
         friend ostream& operator<<(ostream& os, const Word& w) {
