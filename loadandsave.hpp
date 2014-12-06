@@ -41,7 +41,7 @@
 
 using namespace std;
 
-unique_ptr<map<string, unique_ptr<Word> > > loadFile(string f = "data.txt")
+unique_ptr<map<string, unique_ptr<Word> > > loadFile(int& markovLength, string f = "data.txt")
 {
         unique_ptr<map<string, unique_ptr<Word> > > myMap(
                         new map<string, unique_ptr<Word> >);
@@ -51,6 +51,7 @@ unique_ptr<map<string, unique_ptr<Word> > > loadFile(string f = "data.txt")
         if (!ifs.is_open())
                 return move(myMap);
 
+        ifs >> markovLength;
         size_t mapSize = 0;
         ifs >> mapSize;
         cout << "Main map size: " << mapSize << endl;
@@ -68,7 +69,7 @@ unique_ptr<map<string, unique_ptr<Word> > > loadFile(string f = "data.txt")
         return move(myMap);
 }
 
-void save(unique_ptr<map<string, unique_ptr<Word> > >& l)
+void save(unique_ptr<map<string, unique_ptr<Word> > >& l, int markovLength)
 {
         ofstream ofs;
         ofs.open("data.txt", ios::out | ios::binary);
@@ -76,6 +77,7 @@ void save(unique_ptr<map<string, unique_ptr<Word> > >& l)
         if (!ofs.is_open())
                 return;
 
+        ofs << markovLength << endl;
         ofs << l->size() << endl;
         for (auto& x : *l) {
                 ofs << x.first << endl << *x.second;

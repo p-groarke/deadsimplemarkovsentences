@@ -71,8 +71,6 @@ struct Word {
 
                 vec.push_back(word_);
                 if (chain_.size() > 0) {
-                        //cout << word_ << " ";
-
                         for (auto& x : chain_) {
                                 if (x.second->weight_ > topWord->weight_)
                                         topWord = new Word(*x.second);
@@ -85,9 +83,7 @@ struct Word {
                         } else {
                                 topWord->outputTopSentence(vec);
                         }
-                } /*else {
-                        return word_;
-                }*/
+                }
         }
 
         void addWordInChain(list<unique_ptr<Word> >& wl) {

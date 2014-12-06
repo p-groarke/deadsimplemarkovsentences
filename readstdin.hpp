@@ -48,7 +48,7 @@ bool isEndOfSentence(unique_ptr<Word>& w)
         return false;
 }
 
-void readSTDIN(unique_ptr<map<string, unique_ptr<Word> > >& myMap, int markovLength = 3)
+void readSTDIN(unique_ptr<map<string, unique_ptr<Word> > >& myMap, int markovLength)
 {
         cout << "Enter text (use ctrl+D to stop)." << endl;
 
@@ -68,7 +68,6 @@ void readSTDIN(unique_ptr<map<string, unique_ptr<Word> > >& myMap, int markovLen
                 if (currentRead + markovLength > hugeAssWordList_.size())
                         break;
 
-                cout << (*x)->word_ << endl;
                 // Create a temporary list of n words (n == markov chain length)
                 auto y = x;
                 for (int i = 0; i < markovLength; ++i) {
@@ -102,7 +101,7 @@ void readSTDIN(unique_ptr<map<string, unique_ptr<Word> > >& myMap, int markovLen
                 x.second->printInfo();
 
         // Save the list to the database.
-        save(myMap);
+        save(myMap, markovLength);
 }
 
 #endif //READSTDIN_H
