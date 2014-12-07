@@ -1,4 +1,4 @@
 
-aiBot: main.cpp word.hpp loadandsave.hpp readstdin.hpp speak.hpp
-	clang++ -g -std=c++11 -stdlib=libc++ main.cpp -o aiBot
+aiBot: main.cpp irc.cpp irc.h word.hpp loadandsave.hpp reader.hpp voice.hpp gutenbergparser.hpp
+	clang++ -g -std=c++11 -stdlib=libc++ main.cpp irc.cpp -o dsmc
 

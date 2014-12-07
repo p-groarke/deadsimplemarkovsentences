@@ -32,17 +32,28 @@
  * This software builds markov chains of length n.
  */
 
+#include "gutenbergparser.hpp"
+#include "irc.h"
+#include "loadandsave.hpp"
+#include "reader.hpp"
+#include "voice.hpp"
+#include "word.hpp"
+
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <memory>
+#include <thread>
+#include <unistd.h>
 #include <vector>
 
-#include "loadandsave.hpp"
-#include "readstdin.hpp"
-#include "speak.hpp"
-#include "word.hpp"
+#ifdef __APPLE__ // TODO: Add linux
+#include <getopt.h>
+#else
+#include "getopt.h"
+#endif
 
 using namespace std;
 
@@ -51,26 +62,38 @@ using namespace std;
 //// CONSTs i& globals ////
 
 int markovLength = 3;
-int numSentences = 10;
+int numSentences = 1;
+bool doRead, doGutenberg, doSpeak, doIrc = false;
 
-
-//// MAIN ////
-
-void outputHelp()
+void printHelp()
 {
-        cout << endl
-            << "#####################################" << endl
-            << "Dead simple Markov Sentence Framework" << endl
-            << "#####################################" << endl << endl
-            << "Philippe Groarke <philippe.groarke@gmail.com>" << endl << endl
-            << "--save     Input text using stdin." << endl
-            << "    --markov [n]    n = length of chains (default 3)." << endl
-            << endl
-            << "--load     Load saved database." << endl
-            << endl
-            << "--speak    Bot will speak sentences." << endl
-            << "    --num [n]    n = number of sentences to generate (default 10)." << endl
-            << endl;
+        cout << endl << "#########################" << endl
+        << "Dead Simple Markov Chains" << endl
+        << "v0.01" << endl
+        << "Philippe Groarke <philippe.groarke@gmail.com>" << endl
+        << "#########################" << endl
+        << endl;
+
+        cout << "Usage: dsmc [options]" << endl << endl;
+
+        cout << "========" << endl
+        << "Options" << endl
+        << "========" << endl
+        << endl;
+
+        //Input
+        cout << "* Input:" << endl << endl;
+        cout << setw(10) << left << "--stdin" << "Learn from input pipe." << endl;
+        cout << setw(10) << left << "    -m [number]" << "Markov length (default 3)." << endl;
+        cout << setw(10) << left << "    --gutenberg" << "Clean books from Gutenberg Project." << endl;
+
+        //Output
+        cout << endl << "* Output:" << endl << endl;
+        cout << setw(10) << left << "--speak" << "Speak to general output." << endl;
+        cout << setw(10) << left << "    -n [number]" << "Generate n number of sentences (default 1)." << endl;
+
+        cout << setw(10) << left << "--irc" << "Connect to Irc." << endl;
+        cout << endl << endl;
 }
 
 int main (int argc, char ** argv)
@@ -79,35 +102,106 @@ int main (int argc, char ** argv)
         // is used most often after it.
         unique_ptr<map<string, unique_ptr<Word> > > mainWordList_(
                         new map<string, unique_ptr<Word> >);
+        mainWordList_ = loadFile(markovLength);
 
-        for (int i = 0; i < argc; ++i) {
-                if ((string)argv[i] == "--help") {
-                        outputHelp();
-                        return 0;
-                }
-                if ((string)argv[i] == "--save") {
-                        if (argc <= i+1) {
-                                // nothing
-                        } else if ((string)argv[++i] == "--markov") {
-                                markovLength = atoi(argv[++i]);
-                                cout << "Markov length is: " << markovLength << endl;
-                        }
-                        readSTDIN(mainWordList_, markovLength);
-                        return 0;
-                }
-                if ((string)argv[i] == "--load") {
-                        mainWordList_ = loadFile(markovLength);
-                }
-                if ((string)argv[i] == "--speak") {
-                        if (argc <= i+1) {
-                                // nothing
-                        } else if ((string)argv[++i] == "--num") {
-                                numSentences = atoi(argv[++i]);
-                                cout << "Generating " << numSentences << " top sentences." << endl;
-                        }
-                        speak(mainWordList_, numSentences, markovLength);
+        unique_ptr<Reader> reader(new Reader());
+        unique_ptr<GutenbergParser> gutenbergParser(new GutenbergParser());
+
+        unique_ptr<Voice> voice(new Voice());
+        voice->setMarkov(markovLength);
+        voice->generateSortedVector(mainWordList_);
+
+
+
+        //// MENU ////
+
+        if (argc == 1) {
+                printHelp();
+                return 0;
+        }
+
+        static struct option long_options[] =
+        {
+                { "help", no_argument, 0, 'h' },
+
+                //Input
+                { "stdin", no_argument, 0, 's' },
+                { "m", required_argument, 0, 'm' },
+                { "gutenberg", no_argument, 0, 'g' },
+
+                //Output
+                { "speak", no_argument, 0, 'S' },
+                { "n", required_argument, 0, 'n' },
+
+                //Irc
+                { "irc", no_argument, 0, 'i' }
+
+        };
+
+        int option_index = 0;
+
+        int opt = 0;
+        while ((opt = getopt_long(argc, argv, "hsm:gSn:i",
+                long_options, &option_index)) != -1) {
+
+                switch (opt) {
+                        // Input
+                        case 'm': markovLength = atoi(optarg); break;
+                        case 's': doRead = true; break;
+                        case 'g': doGutenberg = true; break;
+
+                        // Output
+                        case 'n': numSentences = atoi(optarg); break;
+                        case 'S': doSpeak = true; break;
+
+                        // Irc
+                        case 'i': doIrc = true; break;
+
+                        // Help & error
+                        case 'h': printHelp(); break;
+                        case '?': cout << "What happened?" << endl; break;
+                        default: printHelp();
                 }
         }
+
+
+
+        //// MAIN ////
+
+        if (doGutenberg) {
+                cout << "Testing gutenberg parser." << endl << endl;
+
+                while (cin >> *gutenbergParser) {}
+
+        }
+
+        if (!doGutenberg && doRead) {
+                while (cin >> *reader) {}
+                reader->generateMainTree(mainWordList_, markovLength);
+                save(mainWordList_, markovLength);
+        }
+
+        if (doSpeak) {
+                voice->generateSortedVector(mainWordList_);
+                voice->speak(numSentences);
+        }
+
+        if (doIrc) {
+                Irc bot = Irc(
+                        "NICK melinda87_2\r\n",
+                        "USER melinda87_2 hostname servername :Bob Affet\r\n",
+                        "irc.freenode.net",
+                        "JOIN #socapex\r\n",
+                        "PASS oauth:p74yztnqkje36y5a0fe2v7herwh5v7\r\n");
+
+                        thread ircThread(&Irc::start, &bot);
+                        //bot.start();
+                        while (true) {
+                                sleep(10);
+                                bot.say(voice->speakTwitch());
+                        }
+        }
+
         return 0;
 }
 

@@ -27,61 +27,26 @@
  *  shall include the source code for the parts of OpenSSL used as well
  *  as that of the covered work.
  */
-#ifndef LOADANDSAVE_H
-#define LOADANDSAVE_H
+#pragma once
 
-#include <fstream>
 #include <iostream>
-#include <list>
-#include <map>
-#include <utility>
-#include <vector>
-
-#include "word.hpp"
+#include <string>
 
 using namespace std;
 
-unique_ptr<map<string, unique_ptr<Word> > > loadFile(int& markovLength, string f = "data.txt")
-{
-        unique_ptr<map<string, unique_ptr<Word> > > myMap(
-                        new map<string, unique_ptr<Word> >);
-        ifstream ifs;
-        ifs.open(f, ios::in | ios::binary);
+struct GutenbergParser {
+        GutenbergParser() {}
 
-        if (!ifs.is_open())
-                return move(myMap);
+        friend istream& operator>>(istream& is, GutenbergParser& gp) {
+                string userText;
+                is >> userText;
 
-        ifs >> markovLength;
-        size_t mapSize = 0;
-        ifs >> mapSize;
-        cout << "Current database size: " << mapSize << endl;
+                cout << userText << endl;
 
-        for (int i = 0; i < mapSize; ++i) {
-                string tempKey;
-                unique_ptr<Word> tempWord(new Word());
-                ifs >> tempKey >> *tempWord;
-                myMap->insert(
-                        pair<string, unique_ptr<Word> >(tempKey, move(tempWord)));
+                return is;
         }
 
-        //for (auto& x : *myMap)
-        //        x.second->printInfo();
-        return move(myMap);
-}
-
-void save(unique_ptr<map<string, unique_ptr<Word> > >& l, int markovLength)
-{
-        ofstream ofs;
-        ofs.open("data.txt", ios::out | ios::binary);
-
-        if (!ofs.is_open())
-                return;
-
-        ofs << markovLength << endl;
-        ofs << l->size() << endl;
-        for (auto& x : *l) {
-                ofs << x.first << endl << *x.second;
+        friend ostream& operator<<(ostream& os, const GutenbergParser& gp) {
+                return os;
         }
-}
-
-#endif // LOADANDSAVE_H
+};

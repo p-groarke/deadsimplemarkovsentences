@@ -131,13 +131,18 @@ struct Word {
                 unique_ptr<Word> topWord(new Word());
                 topWord->weight_ = 0;
 
-                if (chain_.size() <= 0)
+                if (chain_.size() <= 0) {
                         return topWord;
+                }
 
+                srand (time(NULL));
                 int top = rand() % 10;
-                if (sortedByWeight.size() < 10)
+                if (sortedByWeight.size()-1 < top) {
+                        //cout << "Chain not long enough, size: " << chain_.size() << endl;
+                        srand (time(NULL));
                         top = rand() % sortedByWeight.size();
-
+                        //cout << "New random number: " << top << endl;
+                }
                 topWord.reset(new Word(*sortedByWeight[top]));
 
                 return topWord;
