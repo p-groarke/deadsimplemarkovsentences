@@ -58,6 +58,7 @@ struct Reader {
 
                 // Get input.
                 while (is >> userText) {
+                        //cout << userText << " ";
                         r.hugeAssWordList_.push_back(unique_ptr<Word>(new Word(userText)));
                 }
 
@@ -107,8 +108,8 @@ struct Reader {
                                 hugeAssWordList_.end());
 
                 // Debug output of root tree.
-                // for (auto& x : *myMap)
-                //         x.second->printInfo();
+                for (auto& x : *myMap)
+                         x.second->printInfo();
 
         }
 

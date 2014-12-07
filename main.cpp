@@ -171,8 +171,9 @@ int main (int argc, char ** argv)
         if (doGutenberg) {
                 cout << "Testing gutenberg parser." << endl << endl;
 
-                while (cin >> *gutenbergParser) {}
-
+                while (cin >> *gutenbergParser >> *reader) {}
+                reader->generateMainTree(mainWordList_, markovLength);
+                save(mainWordList_, markovLength);
         }
 
         if (!doGutenberg && doRead) {
@@ -190,14 +191,14 @@ int main (int argc, char ** argv)
                 Irc bot = Irc(
                         "NICK melinda87_2\r\n",
                         "USER melinda87_2 hostname servername :Bob Affet\r\n",
-                        "irc.freenode.net",
+                        "irc.twitch.tv",
                         "JOIN #socapex\r\n",
                         "PASS oauth:p74yztnqkje36y5a0fe2v7herwh5v7\r\n");
 
                         thread ircThread(&Irc::start, &bot);
                         //bot.start();
                         while (true) {
-                                sleep(10);
+                                sleep(120);
                                 bot.say(voice->speakTwitch());
                         }
         }

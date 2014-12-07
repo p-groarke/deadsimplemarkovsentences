@@ -29,24 +29,143 @@
  */
 #pragma once
 
+#include <algorithm>
+#include <cctype>
 #include <iostream>
 #include <string>
+#include <sstream>
 
 using namespace std;
+
+enum States {FIRSTNOTICE, BADLINE, END};
 
 struct GutenbergParser {
         GutenbergParser() {}
 
+        bool isAllUpper(const string& s)
+        {
+                int up = 0;
+                for (const auto& x : s) {
+                        if (!isalpha(x)) {}
+                        else if (isupper(x)) {
+                                up++;
+                        }
+                }
+                if ((float(up) / s.size()) > 0.5f)
+                        return true;
+
+                return false;
+        }
+
+        bool fiveSpaces(const string& s)
+        {
+                if (s.size() < 6)
+                        return false;
+
+                bool spaces = true;
+                for (int i = 0; i < 6; ++i) {
+                        if (s[i] != ' ')
+                                spaces = false;
+                }
+                return spaces;
+        }
+
+        bool fiveSpacesAndNum(const string& s)
+        {
+                bool spaces = false;
+                for (int i = 0; i < s.size(); ++i) {
+                        if (s[i] == ' ' && s[i+1] == ' ' &&
+                        s[i+2] == ' ' && s[i+3] == ' ' &&
+                        s[i+4] == ' ') {
+                                if (isdigit(s[i+5])) {
+                                        spaces = true;
+                                        break;
+                                }
+                        }
+                }
+                return spaces;
+        }
+
         friend istream& operator>>(istream& is, GutenbergParser& gp) {
                 string userText;
-                is >> userText;
 
-                cout << userText << endl;
+                while(getline(is, userText)) {
+                        // Letiral text
+                        if (userText.find("The Project Gutenberg EBook of") != string::npos)
+                                gp.currentState_ = FIRSTNOTICE;
 
-                return is;
+                        else if (userText.find("Produced by") != string::npos)
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.find("Proofreading Team") != string::npos)
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.find("produced from images generously made available by") != string::npos)
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.find("Internet Archive") != string::npos)
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.find("THE END") != string::npos)
+                                gp.currentState_ = END;
+
+                        else if (userText.find("*** END OF THIS PROJECT GUTENBERG") != string::npos)
+                                gp.currentState_ = END;
+
+                        else if (userText.substr(0, 5) == "Page ")
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.substr(0, 3) == "***")
+                                gp.currentState_ = BADLINE;
+
+                        // Patterns
+                        else if (gp.isAllUpper(userText))
+                                gp.currentState_ = BADLINE;
+
+                        else if (gp.fiveSpaces(userText))
+                                gp.currentState_ = BADLINE;
+
+                        else if (gp.fiveSpacesAndNum(userText))
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.empty() || userText == "\t"
+                                || userText == "\r\n" || userText == "\r"
+                                || userText == "\n")
+                                gp.currentState_ = BADLINE;
+
+                        else
+                                gp.currentState_ = 4200;
+
+                        switch(gp.currentState_) {
+                                case FIRSTNOTICE:
+                                        while(getline(is, userText)) {
+                                                if (userText.find("*** START OF THIS PROJECT GUTENBERG EBOOK") != string::npos) {
+                                                        gp.currentState_ = 4200; // Default
+                                                        break;
+                                                }
+                                        }
+                                break;
+                                case BADLINE:
+
+                                break;
+                                case END:
+                                        while(getline(is, userText)) {}
+                                break;
+                                default:
+                                        userText.erase(remove(userText.begin(), userText.end(), '|'), userText.end());
+                                        userText.erase(remove(userText.begin(), userText.end(), '_'), userText.end());
+                                        gp.ss << userText << " ";
+                                break;
+                        }
+                }
+
+                return gp.ss;
         }
 
         friend ostream& operator<<(ostream& os, const GutenbergParser& gp) {
                 return os;
         }
+
+        int currentState_ = 4200;
+        stringstream ss;
 };

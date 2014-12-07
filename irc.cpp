@@ -164,13 +164,12 @@ bool Irc::sendData(const string& msg)
         if (send(socket_, msg.c_str(), msg.size(), 0) == 0)
                 return false;
 
-        cout << "Sent " << msg.c_str();
+        //cout << "Sent " << msg.c_str();
         return true;
 }
 
 string Irc::recvData()
 {
-        cout << "Receiving data" << endl;
         int numRecv;
         char buf[MAXDATASIZE];
         numRecv = recv(socket_, buf, MAXDATASIZE-1, 0);
