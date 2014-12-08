@@ -22,6 +22,7 @@
 
 #include <iostream>
 #include <list>
+#include <string>
 #include <vector>
 
 #include "loadandsave.hpp"
@@ -42,12 +43,22 @@ struct Reader {
                 return false;
         }
 
+        void addCharacteristics(unique_ptr<Word>& w)
+        {
+                if (isEndOfSentence(w)) {
+                        w->characteristics_.insert(CHARACTER_ENDL);
+                }
+
+                if (isupper(w->word_[0])) {
+                        w->characteristics_.insert(CHARACTER_BEGIN);
+                }
+        }
+
         friend istream& operator>>(istream& is, Reader& r) {
                 string userText;
 
                 // Get input.
                 while (is >> userText) {
-                        //cout << userText << " ";
                         r.hugeAssWordList_.push_back(unique_ptr<Word>(new Word(userText)));
                 }
 
@@ -58,7 +69,6 @@ struct Reader {
         {
                 int currentRead = 0;
                 for (auto x = hugeAssWordList_.begin(); x != hugeAssWordList_.end();) {
-                //for (auto& x : hugeAssWordList_) {
                         list<unique_ptr<Word> > temp;
 
                         if (currentRead + markovLength > hugeAssWordList_.size())
@@ -67,6 +77,7 @@ struct Reader {
                         // Create a temporary list of n words (n == markov chain length)
                         auto y = x;
                         for (int i = 0; i < markovLength; ++i) {
+                                addCharacteristics(*y);
                                 if (i == 0) {
                                         temp.push_back(move(*x));
                                         ++y;
@@ -76,14 +87,23 @@ struct Reader {
                                 }
                         }
 
+                        // Get the first word.
                         unique_ptr<Word> wt = move(temp.front());
                         temp.pop_front();
+
+                        // Copy characterisics or else segfault.
+                        unordered_set<string> tempChars = wt->characteristics_;
 
                         auto ret = myMap->insert(
                                 pair<string, unique_ptr<Word> >(wt->word_, move(wt)));
 
+                        // If the word is allready in the main map, add weight
+                        // and all characteristics.
                         if (ret.second == false) {
                                 ret.first->second->weight_++;
+                                for (auto& x : tempChars) {
+                                        ret.first->second->characteristics_.insert(x);
+                                }
                         }
 
                         ret.first->second->addWordInChain(temp);

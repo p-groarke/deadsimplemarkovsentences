@@ -48,89 +48,87 @@ struct Voice {
                 });
         }
 
-        vector<string> findFirstWords(int range) // Higher range is more random
+        // Will output the position
+        vector<unique_ptr<Word> > findFirstWords(int range) // Higher range is more random
         {
-                srand (time(NULL));
+                static int lastPos = 0; // Keep track of the last position.
+
+                if (range < 1) // Prevent crash
+                        range = 1;
+
                 int randomPos = rand() % range;
-                vector<string> sentence;
+                vector<unique_ptr<Word> > sentence;
+
+                // We don't want to start before the last First Word,
+                // or else we will output the same one. Only used for
+                // low randomness.
+                if (lastPos > randomPos && range == 1)
+                        randomPos = lastPos + 1;
 
                 for (int i = randomPos; i < sortedVector.size(); ++i) {
-                        if(!isupper(sortedVector[i]->word_[0])) // Capitalize first letter
+                        // Loop around if at end
+                        if (i + 1 >= sortedVector.size())
+                                i = 0;
+
+                        // First word needs to start a sentence
+                        if (sortedVector[i]->characteristics_.find(CHARACTER_BEGIN)
+                        == sortedVector[i]->characteristics_.end())
                                 continue;
 
                         sortedVector[i]->outputTopSentence(sentence);
+                        lastPos = i;
                         break;
                 }
                 return sentence;
         }
 
-        string speakTwitch()
+        vector<string> speak(int numSentences = 1, int randomness = 1,
+                int minWords = 3, int maxWords = 20)
         {
-                string outputSentence;
-                vector<string> sentence = findFirstWords(sortedVector.size()/2);
+                vector<string> ret;
 
-                while (!isEndOfSentence(sentence.back())) {
-                        int beforeLast = sentence.size() - (markovLength_ - 1);
-                        string s = sentence[beforeLast];
-                        auto temp = find_if(sortedVector.begin(), sortedVector.end(),
-                                [s](unique_ptr<Word>& w1) -> bool {
-                                        return w1->word_ == s;
-                        });
-                        if (temp != sortedVector.end()) {
-                                sentence.push_back((*temp)->getWord(
-                                        sentence.back())->topWord()->word_);
-                        } else {
-                                break;
-                        }
-                }
+                for (int i = 0; i < numSentences; ++i) {
 
-                for (auto x : sentence) {
-                        //cout << x << " ";
-                        outputSentence += x + " ";
-                }
+                        string outputSentence;
+                        // Get a sentence beginning in 75% most used.
+                        vector<unique_ptr<Word> > sentence =
+                                findFirstWords(randomness);
 
-                // For twitch, make sentences smaller. Number of words.
-                if (sentence.size() > 20)
-                        outputSentence = speakTwitch();
-
-                return outputSentence;
-        }
-
-        void speak(int numSentences)
-        {
-                int i = 0;
-                for (auto& x : sortedVector) {
-                        // Only pick the first word with a capital letter.
-                        if (!isupper(x->word_[0]))
-                                continue;
-
-                        vector<string> sentence;
-                        x->outputTopSentence(sentence);
-
-                        while (!isEndOfSentence(sentence.back()))
-                        {
+                        while (sentence.back()->characteristics_.find(CHARACTER_ENDL)
+                        == sentence.back()->characteristics_.end()) {
+                                // Get the word before the last one, so we will get a
+                                // chain of 2 for example.
                                 int beforeLast = sentence.size() - (markovLength_ - 1);
-                                string s = sentence[beforeLast];
+
+                                string s = sentence[beforeLast]->word_;
                                 auto temp = find_if(sortedVector.begin(), sortedVector.end(),
                                         [s](unique_ptr<Word>& w1) -> bool {
                                                 return w1->word_ == s;
                                 });
+
+                                // Now, get a top word AFTER the last word in sentence.
+                                // Ex: beforeLast->currentWord->newTopWord is what we
+                                // are doing.
                                 if (temp != sortedVector.end()) {
                                         sentence.push_back((*temp)->getWord(
-                                                sentence.back())->topWord()->word_);
-                                } else {
+                                                sentence.back())->topWord());
+                                } else { // Just make sure we are not at the complete end.
                                         break;
                                 }
                         }
 
-                        for (auto x : sentence)
-                                cout << x << " ";
-                        cout << endl;
-        //                cout << "   (" << x->weight_ << ")" << endl;
-                        ++i;
-                        if (i >= numSentences)
-                                break;
+                        for (auto& x : sentence) {
+                                outputSentence += x->word_ + " ";
+                        }
+
+                        // For twitch, make sentences smaller. Number of words.
+                        if (sentence.size() > maxWords || sentence.size() < minWords)
+                                outputSentence = speak(1, randomness, minWords, maxWords).back();
+
+                        ret.push_back(outputSentence);
                 }
+
+                return ret;
         }
 
         vector<unique_ptr<Word> > sortedVector;

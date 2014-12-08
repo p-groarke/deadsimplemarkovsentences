@@ -17,41 +17,17 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA.
  */
 
-#ifndef IRC_H_
-#define IRC_H_
+#include "word.hpp"
 
-#include <atomic>
+#include <iostream>
 #include <string>
 
-using namespace std;
+struct Discussion {
 
-class Irc {
-public:
-        Irc(const string& nick, const string& usr, const string& address,
-                const string& channel, const string& pass = "",
-                const string& port = "6667");
-        Irc(const Irc& obj);
-        virtual ~Irc();
+        Discussion() {}
 
-        void start();
-        void say(const string& msg);
+        void findContext(const string& sentence) {
 
-        atomic<int> socket_; //socket descriptor
-        string nick_;
-        string usr_;
-        string address_;
-        string channel_;
-        string pass_;
-        string port_;
-
-private:
-        bool ircConnect();
-        void sendConnect();
-        bool isConnected(const string& msg);
-        bool sendData(const string& msg);
-        string recvData();
-        void sendPong(const string& msg);
-        void outputMsg(const string& msg);
+        }
 };
 
-#endif /* Irc_H_ */

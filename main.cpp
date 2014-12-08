@@ -21,8 +21,9 @@
  * This software builds markov chains of length n.
  */
 
+#include "discussion.hpp"
 #include "gutenbergparser.hpp"
-#include "irc.h"
+#include "irc.hpp"
 #include "loadandsave.hpp"
 #include "reader.hpp"
 #include "voice.hpp"
@@ -72,21 +73,29 @@ void printHelp()
 
         //Input
         cout << "* Input:" << endl << endl;
-        cout << setw(10) << left << "--stdin" << "Learn from input pipe." << endl;
-        cout << setw(10) << left << "    -m [number]" << "Markov length (default 3)." << endl;
-        cout << setw(10) << left << "    --gutenberg" << "Clean books from Gutenberg Project." << endl;
+        cout << setw(25) << left << "--stdin" << "Learn from input pipe." << endl;
+        cout << setw(25) << left << "    -m [number]" << "Markov length (default 3)." << endl;
+        cout << setw(25) << left << "    --gutenberg" << "Clean books from Gutenberg Project." << endl;
 
         //Output
         cout << endl << "* Output:" << endl << endl;
-        cout << setw(10) << left << "--speak" << "Speak to general output." << endl;
-        cout << setw(10) << left << "    -n [number]" << "Generate n number of sentences (default 1)." << endl;
+        cout << setw(25) << left << "--speak" << "Speak to general output." << endl;
+        cout << setw(25) << left << "    -n [number]" << "Generate n number of sentences (default 1)." << endl;
 
-        cout << setw(10) << left << "--irc" << "Connect to Irc." << endl;
+        cout << endl << "* Irc:" << endl << endl;
+        cout << setw(25) << left << "--irc" << "Connect to Irc." << endl;
+        cout << setw(25) << left << "    --nick " << "Nickname and username (default Melinda87_2)." << endl;
+        cout << setw(25) << left << "    --server " << "Server address (default irc.twitch.tv)." << endl;
+        cout << setw(25) << left << "    --channel" << "Join a channel (default #socapex)." << endl;
+        cout << setw(25) << left << "    --pass" << "Server password." << endl;
         cout << endl << endl;
 }
 
 int main (int argc, char ** argv)
 {
+        // Set randomness
+        srand (time(NULL));
+
         // The map is the first word, the attached map is ordered by which word
         // is used most often after it.
         unique_ptr<map<string, unique_ptr<Word> > > mainWordList_(
@@ -100,7 +109,11 @@ int main (int argc, char ** argv)
         voice->setMarkov(markovLength);
         voice->generateSortedVector(mainWordList_);
 
-
+        Irc ircBot = Irc(
+                "melinda87_2",
+                "irc.twitch.tv",
+                "#socapex",
+                "oauth:p74yztnqkje36y5a0fe2v7herwh5v7");
 
         //// MENU ////
 
@@ -123,14 +136,18 @@ int main (int argc, char ** argv)
                 { "n", required_argument, 0, 'n' },
 
                 //Irc
-                { "irc", no_argument, 0, 'i' }
+                { "irc", no_argument, 0, 'i' },
+                { "nick", required_argument, 0, 'N' },
+                { "server", required_argument, 0, 'I' },
+                { "channel", required_argument, 0, 'c' },
+                { "pass", required_argument, 0, 'p' }
 
         };
 
         int option_index = 0;
 
         int opt = 0;
-        while ((opt = getopt_long(argc, argv, "hsm:gSn:i",
+        while ((opt = getopt_long(argc, argv, "hsm:gSn:iN:I:c:p:",
                 long_options, &option_index)) != -1) {
 
                 switch (opt) {
@@ -145,6 +162,10 @@ int main (int argc, char ** argv)
 
                         // Irc
                         case 'i': doIrc = true; break;
+                        case 'N': ircBot.nick_ = string(optarg); break;
+                        case 'I': ircBot.address_ = optarg; break;
+                        case 'c': ircBot.channel_ = optarg; break;
+                        case 'p': ircBot.pass_ = optarg; break;
 
                         // Help & error
                         case 'h': printHelp(); break;
@@ -157,9 +178,7 @@ int main (int argc, char ** argv)
 
         //// MAIN ////
 
-        if (doGutenberg) {
-                cout << "Testing gutenberg parser." << endl << endl;
-
+        if (doGutenberg && doRead) {
                 while (cin >> *gutenbergParser >> *reader) {}
                 reader->generateMainTree(mainWordList_, markovLength);
                 save(mainWordList_, markovLength);
@@ -173,25 +192,23 @@ int main (int argc, char ** argv)
 
         if (doSpeak) {
                 voice->generateSortedVector(mainWordList_);
-                voice->speak(numSentences);
+                for (auto& x : voice->speak(numSentences))
+                        cout << x << endl;
         }
 
         if (doIrc) {
-                Irc bot = Irc(
-                        "NICK melinda87_2\r\n",
-                        "USER melinda87_2 hostname servername :Bob Affet\r\n",
-                        "irc.twitch.tv",
-                        "JOIN #socapex\r\n",
-                        "PASS oauth:p74yztnqkje36y5a0fe2v7herwh5v7\r\n");
+                thread ircThread(&Irc::start, &ircBot);
 
-                        thread ircThread(&Irc::start, &bot);
-                        //bot.start();
-                        while (true) {
-                                sleep(120);
-                                bot.say(voice->speakTwitch());
-                        }
+                while (true) {
+                        sleep(120);
+                        ircBot.say(voice->speak(1,
+                                mainWordList_->size()/1.5).back());
+
+                }
+
+                ircThread.join();
+                save(mainWordList_, markovLength);
         }
-
         return 0;
 }
 

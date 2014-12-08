@@ -25,18 +25,13 @@
 #include <iostream>
 #include <list>
 #include <map>
+#include <unordered_set>
 #include <vector>
 
 using namespace std;
 
-bool isEndOfSentence(const string& w)
-{
-        if (w.find(".") != string::npos ||
-            w.find("!") != string::npos ||
-            w.find("?") != string::npos)
-                return true;
-        return false;
-}
+const string CHARACTER_ENDL = "END";
+const string CHARACTER_BEGIN = "START";
 
 struct Word {
         Word() : word_(""), weight_(1) {}
@@ -47,27 +42,28 @@ struct Word {
                                 x.first, move(temp)));
                 }
                 for (auto x : obj.characteristics_) {
-                        characteristics_.push_back(x);
+                        characteristics_.insert(x);
                 }
         }
         Word(const string& txt) :
                 word_(txt), weight_(1) {}
 
         // Stop at end of sentence
-        void outputTopSentence(vector<string>& vec) {
-                Word* topWord = new Word();
+        void outputTopSentence(vector<unique_ptr<Word> >& vec) {
+                unique_ptr<Word> topWord(new Word());
                 topWord->weight_ = 0;
 
-                vec.push_back(word_);
+                vec.push_back(unique_ptr<Word>(new Word(*this)));
                 if (chain_.size() > 0) {
                         for (auto& x : chain_) {
                                 if (x.second->weight_ > topWord->weight_)
-                                        topWord = new Word(*x.second);
+                                        topWord = unique_ptr<Word>(new Word(*x.second));
                         }
 
                         // Check if we have reached the end of a sentence.
-                        if (isEndOfSentence(topWord->word_)) {
-                                vec.push_back(topWord->word_);
+                        if (topWord->characteristics_.find(CHARACTER_ENDL)
+                        != topWord->characteristics_.end()) {
+                                vec.push_back(move(topWord));
                                 return;
                         } else {
                                 topWord->outputTopSentence(vec);
@@ -79,12 +75,17 @@ struct Word {
                 if (wl.size() <= 0)
                     return;
 
+                unordered_set<string> tempChar = wl.front()->characteristics_;
+
                 auto ret = chain_.insert(
                         pair<string, unique_ptr<Word> >(
                                 wl.front()->word_, move(wl.front())));
 
                 if (ret.second == false) {
                         ret.first->second->weight_++;
+                        // Add characteristics.
+                        for (auto& x : tempChar)
+                                ret.first->second->characteristics_.insert(x);
                 }
                 wl.pop_front();
                 ret.first->second->addWordInChain(wl);
@@ -103,6 +104,10 @@ struct Word {
 
         unique_ptr<Word>& getWord(const string& key) {
                 return chain_.at(key);
+        }
+
+        unique_ptr<Word>& getWord(unique_ptr<Word>& key) {
+                return chain_.at(key->word_);
         }
 
         unique_ptr<Word> topWord() {
@@ -153,12 +158,13 @@ struct Word {
 
         friend istream& operator>>(istream& is, Word& w) {
                 is >> w.word_ >> w.weight_;
+
                 size_t size;
                 is >> size;
                 for (int i = 0; i < size; ++i) {
                         string c;
                         is >> c;
-                        w.characteristics_.push_back(c);
+                        w.characteristics_.insert(c);
                 }
 
                 is >> size;
@@ -174,7 +180,7 @@ struct Word {
         }
 
         map<string, unique_ptr<Word> > chain_;
-        vector<string> characteristics_;
+        unordered_set<string> characteristics_;
 
         string word_;
         int weight_ = 1;

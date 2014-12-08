@@ -40,7 +40,7 @@ struct GutenbergParser {
                                 up++;
                         }
                 }
-                if ((float(up) / s.size()) > 0.5f)
+                if ((float(up) / s.size()) > 0.4f)
                         return true;
 
                 return false;
@@ -48,11 +48,11 @@ struct GutenbergParser {
 
         bool fiveSpaces(const string& s)
         {
-                if (s.size() < 6)
+                if (s.size() < 5)
                         return false;
 
                 bool spaces = true;
-                for (int i = 0; i < 6; ++i) {
+                for (int i = 0; i < 5; ++i) {
                         if (s[i] != ' ')
                                 spaces = false;
                 }
@@ -73,6 +73,31 @@ struct GutenbergParser {
                         }
                 }
                 return spaces;
+        }
+
+        bool footNote(const string& s)
+        {
+                bool note = false;
+
+                if (isdigit(s[0])) { // 12. bla bla
+                        for (int i = 0; i < s.size(); ++i) {
+                                if (!isdigit(s[i]) && s[i] == '.') {
+                                        return true;
+                                } else if (!isdigit(s[i])) {
+                                        break;
+                                }
+                        }
+                }
+
+                int pos = s.find("(");
+                if (pos != string::npos) {
+                        if (s.size() < pos + 3) {
+                        } else if (s[pos+2] == ')' || s[pos+3] == ')')
+                                return true;
+                }
+
+                return note;
+
         }
 
         friend istream& operator>>(istream& is, GutenbergParser& gp) {
@@ -101,6 +126,27 @@ struct GutenbergParser {
                         else if (userText.find("*** END OF THIS PROJECT GUTENBERG") != string::npos)
                                 gp.currentState_ = END;
 
+                        else if (userText.find("CHAPTER") != string::npos)
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.find("---") != string::npos)
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.find("    *") != string::npos)
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.find("=>") != string::npos)
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.find("{") != string::npos)
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.find("[") != string::npos)
+                                gp.currentState_ = BADLINE;
+
+                        else if (userText.find("]") != string::npos)
+                                gp.currentState_ = BADLINE;
+
                         else if (userText.substr(0, 5) == "Page ")
                                 gp.currentState_ = BADLINE;
 
@@ -115,6 +161,9 @@ struct GutenbergParser {
                                 gp.currentState_ = BADLINE;
 
                         else if (gp.fiveSpacesAndNum(userText))
+                                gp.currentState_ = BADLINE;
+
+                        else if (gp.footNote(userText))
                                 gp.currentState_ = BADLINE;
 
                         else if (userText.empty() || userText == "\t"
@@ -138,9 +187,20 @@ struct GutenbergParser {
 
                                 break;
                                 case END:
-                                        while(getline(is, userText)) {}
+                                        while(getline(is, userText)) {
+                                                if (userText.find("*** START OF THIS PROJECT GUTENBERG EBOOK") != string::npos) {
+                                                        gp.currentState_ = 4200; // Default
+                                                        break;
+                                                }
+                                        }
                                 break;
                                 default:
+                                        // Cleanup
+                                        int pos = userText.find("--");
+                                        if (pos != string::npos) {
+                                                userText.replace(pos, 2, " -");
+                                                userText.insert(pos + 2, " ");
+                                        }
                                         userText.erase(remove(userText.begin(), userText.end(), '|'), userText.end());
                                         userText.erase(remove(userText.begin(), userText.end(), '_'), userText.end());
                                         gp.ss << userText << " ";

@@ -17,19 +17,57 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301 USA.
  */
 
-#include "irc.h"
+#ifndef IRC_H_
+#define IRC_H_
 
+#include <atomic>
 #include <iostream>
 #include <netdb.h>
+#include <string>
 #include <unistd.h>
 
-#define MAXDATASIZE 1000
+using namespace std;
+
+const int MAXDATASIZE = 1000;
+
+class Irc {
+public:
+        Irc(const string& nick, const string& address,
+                const string& channel, const string& pass = "",
+                const string& port = "6667");
+        Irc(const Irc& obj);
+        virtual ~Irc();
+
+        void start();
+        void say(const string& msg);
+
+        atomic<int> socket_; //socket descriptor
+        string nick_;
+        string address_;
+        string channel_;
+        string pass_;
+        string port_;
+
+private:
+        bool ircConnect();
+        void sendConnect();
+        bool isConnected(const string& msg);
+        bool sendData(const string& msg);
+        string recvData();
+        string formatNiceOutput(const string& msg);
+        string formatString(const string& command, const string& str);
+        string formatPrivMsg(const string& command, const string& channel,
+                const string& str);
+        void sendPong(const string& msg);
+};
 
 
-Irc::Irc(const string& nick, const string& usr, const string& address,
+
+//// IMPLEMENTATION ////
+
+Irc::Irc(const string& nick, const string& address,
         const string& channel, const string& pass, const string& port) :
         nick_(nick),
-        usr_(usr),
         address_(address),
         channel_(channel),
         pass_(pass),
@@ -38,7 +76,6 @@ Irc::Irc(const string& nick, const string& usr, const string& address,
 
 Irc::Irc(const Irc& obj) :
         nick_(obj.nick_),
-        usr_(obj.usr_),
         address_(obj.address_),
         channel_(obj.channel_),
         pass_(obj.pass_),
@@ -61,8 +98,13 @@ void Irc::start()
                 // Check ping: http://www.irchelp.org/irchelp/rfc/chapter4.html
                 if (msg.find("PING") != string::npos) {
                         sendPong(msg);
-                } else { //Pass buf to the message handeler
-                        outputMsg(msg);
+                } else if (msg == "DISCONNECT") {
+                        return;
+                } else if (msg.find("PRIVMSG") != string::npos
+                        && msg.find("#") != string::npos) {
+                        formatNiceOutput(msg);
+                } else {
+                        cout << msg;
                 }
 
         }
@@ -70,9 +112,7 @@ void Irc::start()
 
 void Irc::say(string const& msg)
 {
-        string tempChan = channel_.substr(5);
-        tempChan = tempChan.erase(tempChan.size() - 2, tempChan.size());
-        sendData("PRIVMSG #socapex :" + msg + "\r\n");
+        sendData(formatPrivMsg("PRIVMSG", channel_, msg));
 }
 
 
@@ -122,20 +162,24 @@ void Irc::sendConnect()
                 if (pass_.empty())
                     cout << "Twitch requires an oath password." << endl;
 
-                sendData(pass_);
-                sendData(nick_);
-                sendData(usr_);
+                sendData(formatString("PASS", pass_));
+                sendData(formatString("NICK", nick_));
+                sendData(formatString("USER", nick_));
 
                 // Recieve a response
                 cout << recvData();
-                sendData(channel_);
+                sendData(formatString("JOIN", channel_));
 
         } else { // 3 recieves, then send info.
                 cout << recvData() << recvData() << recvData();
-                sendData(nick_);
-                sendData(usr_);
+
+                if (!pass_.empty())
+                        sendData(formatString("PASS", pass_));
+                sendData(formatString("NICK", nick_));
+                sendData(formatString("USER", nick_));
+
                 cout << recvData();
-                sendData(channel_);
+                sendData(formatString("JOIN", channel_));
         }
 }
 
@@ -172,6 +216,54 @@ string Irc::recvData()
         return string(buf);
 }
 
+string Irc::formatNiceOutput(const string& msg)
+{
+        string ret, chan;
+        ret = msg.substr(msg.find("PRIVMSG"));
+        chan = ret.substr(ret.find(":") - 1);
+        ret = ret.substr(ret.find(":"));
+        ret = ret.erase(0, 1);
+        return ret;
+}
+
+
+string Irc::formatString(const string& command, const string& str)
+{
+        string ret = command;
+
+        if (ret[ret.size() - 1] != ' ')
+                ret += " ";
+
+        if (ret == "USER ") {
+                for (int i = 0; i < 4; ++i) {
+                        if (i == 3) {
+                                ret += ":";
+                                break;
+                        } else
+                                ret += str + " ";
+                }
+
+        }
+
+        if ((ret == "JOIN " || ret == "PRIVMSG ")
+            && str.find("#") == string::npos)
+                ret += "#";
+
+        ret += str + "\r\n";
+        cout << ret;
+        return ret;
+}
+
+string Irc::formatPrivMsg(const string& command, const string& channel,
+                const string& str)
+{
+        string ret = formatString("PRIVMSG", channel_);
+        ret = ret.substr(0, ret.size() - 2);
+        ret += " :" + str + "\r\n";
+        cout << ret;
+        return ret;
+}
+
 void Irc::sendPong(const string& msg)
 {
         string response = "PONG " + msg.substr(5);
@@ -182,12 +274,4 @@ void Irc::sendPong(const string& msg)
         }
 }
 
-/*
-* TODO: add you code to respod to commands here
-* the example below replys to the command hi scooby
-*/
-void Irc::outputMsg(const string& msg)
-{
-        cout << msg;
-}
-
+#endif /* Irc_H_ */
