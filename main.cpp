@@ -35,6 +35,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <sstream>
 #include <thread>
 #include <unistd.h>
 #include <vector>
@@ -48,12 +49,13 @@
 using namespace std;
 
 
-
 //// CONSTs i& globals ////
 
 int markovLength = 3;
 int numSentences = 1;
 bool doRead, doGutenberg, doSpeak, doIrc = false;
+
+atomic_bool quitApp(false); // = false; is WRONG
 
 void printHelp()
 {
@@ -89,6 +91,18 @@ void printHelp()
         cout << setw(25) << left << "    --channel" << "Join a channel (default #socapex)." << endl;
         cout << setw(25) << left << "    --pass" << "Server password." << endl;
         cout << endl << endl;
+}
+
+void userCommands()
+{
+        string userIn;
+        while (cin >> userIn) {
+                if (userIn.find("quit") != string::npos) {
+                        quitApp.store(true);
+                        cout << "Shutting down system and saving database." << endl;
+                        break;
+                }
+        }
 }
 
 int main (int argc, char ** argv)
@@ -187,6 +201,9 @@ int main (int argc, char ** argv)
         if (!doGutenberg && doRead) {
                 while (cin >> *reader) {}
                 reader->generateMainTree(mainWordList_, markovLength);
+                for (auto& x : *mainWordList_)
+                        cout << x.first << endl;
+
                 save(mainWordList_, markovLength);
         }
 
@@ -197,18 +214,26 @@ int main (int argc, char ** argv)
         }
 
         if (doIrc) {
+                // Start everything up
                 thread ircThread(&Irc::start, &ircBot);
+                thread userInputLoop(userCommands);
 
-                while (true) {
-                        sleep(120);
+                while (!quitApp) {
+                        sleep(10);/*
                         ircBot.say(voice->speak(1,
                                 mainWordList_->size()/1.5).back());
-
+*/
+                        reader->addToHugeAssWordList(ircBot.getCachedSentences());
+                        reader->generateMainTree(mainWordList_, markovLength);
+                        save(mainWordList_, markovLength);
                 }
-
+                // Cleanup
+                userInputLoop.join();
+                ircBot.stop.store(true);
                 ircThread.join();
                 save(mainWordList_, markovLength);
         }
+
         return 0;
 }
 

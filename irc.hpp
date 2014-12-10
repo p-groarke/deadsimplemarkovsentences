@@ -20,11 +20,17 @@
 #ifndef IRC_H_
 #define IRC_H_
 
+#include "word.hpp"
+
 #include <atomic>
+#include <chrono>
+#include <fcntl.h>
 #include <iostream>
 #include <netdb.h>
 #include <string>
+#include <thread>
 #include <unistd.h>
+#include <utility>
 
 using namespace std;
 
@@ -41,7 +47,26 @@ public:
         void start();
         void say(const string& msg);
 
+        unique_ptr<vector<unique_ptr<Word> > > getCachedSentences();
+
+        friend ostream& operator<<(ostream& os, const Irc& irc) {
+                return os;
+        }
+
+        friend istream& operator>>(istream& is, Irc& irc) {
+                irc.ss.str("");
+                irc.ss.clear();
+                for (auto& x : irc.sentencesToBeParsed) {
+                        irc.ss << x << " ";
+                }
+
+                irc.sentencesToBeParsed.erase(irc.sentencesToBeParsed.begin(),
+                        irc.sentencesToBeParsed.end());
+                return irc.ss;
+        }
+
         atomic<int> socket_; //socket descriptor
+        atomic_bool stop = {false};
         string nick_;
         string address_;
         string channel_;
@@ -53,12 +78,18 @@ private:
         void sendConnect();
         bool isConnected(const string& msg);
         bool sendData(const string& msg);
-        string recvData();
+        vector<string> recvData();
+        void parseOutput(const string& msg);
         string formatNiceOutput(const string& msg);
         string formatString(const string& command, const string& str);
         string formatPrivMsg(const string& command, const string& channel,
                 const string& str);
         void sendPong(const string& msg);
+        void doPart();
+
+        vector<string> users_;
+        vector<string> sentencesToBeParsed; // channel, sentence
+        stringstream ss;
 };
 
 
@@ -92,22 +123,12 @@ void Irc::start()
         if (!ircConnect())
                 return;
 
-        while (true) {
-                string msg = recvData();
-
-                // Check ping: http://www.irchelp.org/irchelp/rfc/chapter4.html
-                if (msg.find("PING") != string::npos) {
-                        sendPong(msg);
-                } else if (msg == "DISCONNECT") {
-                        return;
-                } else if (msg.find("PRIVMSG") != string::npos
-                        && msg.find("#") != string::npos) {
-                        formatNiceOutput(msg);
-                } else {
-                        cout << msg;
-                }
-
+        while (!stop) {
+                this_thread::sleep_for(chrono::seconds(1));
+                for (auto& x : recvData())
+                        parseOutput(x);
         }
+        return;
 }
 
 void Irc::say(string const& msg)
@@ -115,9 +136,75 @@ void Irc::say(string const& msg)
         sendData(formatPrivMsg("PRIVMSG", channel_, msg));
 }
 
+unique_ptr<vector<unique_ptr<Word> > > Irc::getCachedSentences()
+{
+        unique_ptr<vector<unique_ptr<Word> > > ret(new vector<unique_ptr<Word> >);
+
+        // Lets not segfault this time
+        if (sentencesToBeParsed.size() <= 0)
+                return ret;
+
+        for (auto& x : sentencesToBeParsed) {
+                stringstream ss(x);
+                string word;
+
+                vector<unique_ptr<Word> > tempSentence;
+                while(ss >> word) {
+                        tempSentence.push_back(unique_ptr<Word>(new Word(word)));
+                }
+
+                // Since IRC doesnt necessarily have caps or . , add characters here.
+                tempSentence.front()->characteristics_.insert(CHARACTER_BEGIN);
+                tempSentence.back()->characteristics_.insert(CHARACTER_ENDL);
+
+                ret->insert(ret->end(), make_move_iterator(tempSentence.begin()),
+                        make_move_iterator(tempSentence.end()));
+        }
+
+        // Find names! And groove tonight, share the spice of life!
+        //doPart();
+
+        // Delete the cache of sentences.
+        sentencesToBeParsed.erase(sentencesToBeParsed.begin(),
+                sentencesToBeParsed.end());
+
+        return ret;
+}
 
 
 //// PRIVATE ////
+
+void Irc::parseOutput(const string& msg)
+{
+        // Check ping: http://www.irchelp.org/irchelp/rfc/chapter4.html
+        if (msg.find("PING") != string::npos) {
+                sendPong(msg);
+        } else if (msg == "DISCONNECT") {
+                return;
+        } else if (msg.find("JOIN") != string::npos
+                || msg.find("PART") != string::npos) {
+
+                cout << "START MSG " << msg << endl;
+
+                string x = msg;
+                x.erase(0, 1);
+                x.erase(x.find("!"));
+                if (msg.find("JOIN") != string::npos)
+                        x += " JOIN";
+                else
+                        x += " PART";
+
+                cout << " FOUND USERS " << x << endl;
+                users_.push_back(x);
+
+        } else if (msg.find("PRIVMSG") != string::npos
+                && msg.find("#") != string::npos) {
+                sentencesToBeParsed.push_back(formatNiceOutput(msg));
+        } else {
+                if (msg.size() > 0)
+                        cout << msg << endl;
+        }
+}
 
 bool Irc::ircConnect()
 {
@@ -151,6 +238,12 @@ bool Irc::ircConnect()
 
         sendConnect();
 
+        if (fcntl(socket_, F_SETFL, fcntl(socket_, F_GETFL, 0) | O_NONBLOCK)) {
+                close (socket_);
+                perror("Could not set non-blocking socket");
+                worked = false;
+        }
+
         return worked;
 }
 
@@ -167,18 +260,23 @@ void Irc::sendConnect()
                 sendData(formatString("USER", nick_));
 
                 // Recieve a response
-                cout << recvData();
+                for (const auto& x : recvData())
+                        cout << x;
                 sendData(formatString("JOIN", channel_));
 
         } else { // 3 recieves, then send info.
-                cout << recvData() << recvData() << recvData();
+                for (int i = 0; i < 3; ++i) {
+                        for (const auto& x : recvData())
+                                cout << x;
+                }
 
                 if (!pass_.empty())
                         sendData(formatString("PASS", pass_));
                 sendData(formatString("NICK", nick_));
                 sendData(formatString("USER", nick_));
 
-                cout << recvData();
+                for (auto& x : recvData())
+                        cout << x;
                 sendData(formatString("JOIN", channel_));
         }
 }
@@ -194,36 +292,50 @@ bool Irc::isConnected(const string& msg)
 
 bool Irc::sendData(const string& msg)
 {
-        if (send(socket_, msg.c_str(), msg.size(), 0) == 0)
+        if (send(socket_, msg.c_str(), msg.size(), 0) == 0) {
+                cout << "Error sending data: " << msg << endl;
                 return false;
+        }
 
-        //cout << "Sent " << msg.c_str();
         return true;
 }
 
-string Irc::recvData()
+vector<string> Irc::recvData()
 {
+        vector<string> ret;
         int numRecv;
         char buf[MAXDATASIZE];
-        numRecv = recv(socket_, buf, MAXDATASIZE-1, 0);
+        numRecv = recv(socket_, buf, MAXDATASIZE - 1, 0);
         buf[numRecv]='\0';
 
         if (numRecv==0) { // Connection closed
                 cout << "---- No packets received, closing connection. ----"<< endl;
-                return string("DISCONNECT");
+                ret.push_back("DISCONNECT");
+                return ret;
         }
 
-        return string(buf);
+        string s(buf);
+        s.resize(s.size() - 1); // Remove the \0 we had added... DONT ASK!
+        stringstream ss(s);
+        string temp;
+        while(getline(ss, temp, '\n')) { // Chop sentences
+                // SURPRISE!!! THERE ARE STILL FUCKING CRs LEFT
+                temp.erase(std::remove(temp.begin(), temp.end(), '\r'), temp.end());
+                ret.push_back(temp);
+        }
+
+        return ret;
 }
 
 string Irc::formatNiceOutput(const string& msg)
 {
-        string ret, chan;
-        ret = msg.substr(msg.find("PRIVMSG"));
-        chan = ret.substr(ret.find(":") - 1);
-        ret = ret.substr(ret.find(":"));
-        ret = ret.erase(0, 1);
-        return ret;
+        string channel, sentence;
+
+        sentence = msg.substr(msg.find("PRIVMSG"));
+        channel = sentence.substr(sentence.find(":") - 1); // channel
+        sentence = sentence.substr(sentence.find(":"));
+        sentence = sentence.erase(0, 1);
+        return sentence;
 }
 
 
@@ -242,7 +354,6 @@ string Irc::formatString(const string& command, const string& str)
                         } else
                                 ret += str + " ";
                 }
-
         }
 
         if ((ret == "JOIN " || ret == "PRIVMSG ")
@@ -269,8 +380,18 @@ void Irc::sendPong(const string& msg)
         string response = "PONG " + msg.substr(5);
 
         if (sendData(response)) {
-                cout << msg
-                << response << endl;
+                cout << msg << endl;
+                cout << response << endl;
+        }
+}
+
+void Irc::doPart()
+{
+        for (int i = 0; i < users_.size(); ++i) {
+                if (users_[i].find("PART") != string::npos) {
+                        users_[i] = users_.back();
+                        users_.pop_back();
+                }
         }
 }
 

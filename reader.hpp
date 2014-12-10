@@ -60,9 +60,22 @@ struct Reader {
                 // Get input.
                 while (is >> userText) {
                         r.hugeAssWordList_.push_back(unique_ptr<Word>(new Word(userText)));
+                        r.addCharacteristics(r.hugeAssWordList_.back());
                 }
 
                 return is;
+        }
+
+        void addToHugeAssWordList(unique_ptr<Word> w)
+        {
+                hugeAssWordList_.push_back(move(w));
+        }
+
+        void addToHugeAssWordList(unique_ptr<vector<unique_ptr<Word> > > v)
+        {
+                for (auto& x : *v) {
+                        hugeAssWordList_.push_back(move(x));
+                }
         }
 
         void generateMainTree(unique_ptr<map<string, unique_ptr<Word> > >& myMap, int markovLength)
@@ -77,7 +90,6 @@ struct Reader {
                         // Create a temporary list of n words (n == markov chain length)
                         auto y = x;
                         for (int i = 0; i < markovLength; ++i) {
-                                addCharacteristics(*y);
                                 if (i == 0) {
                                         temp.push_back(move(*x));
                                         ++y;
@@ -117,8 +129,8 @@ struct Reader {
                                 hugeAssWordList_.end());
 
                 // Debug output of root tree.
-                for (auto& x : *myMap)
-                         x.second->printInfo();
+                //for (auto& x : *myMap)
+                //         x.second->printInfo();
 
         }
 

@@ -32,6 +32,7 @@ using namespace std;
 
 const string CHARACTER_ENDL = "END";
 const string CHARACTER_BEGIN = "START";
+const string CHARACTER_NAME = "NAME";
 
 struct Word {
         Word() : word_(""), weight_(1) {}
