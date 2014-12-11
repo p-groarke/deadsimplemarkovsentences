@@ -98,7 +98,10 @@ struct Voice {
                         // Get a sentence beginning in 75% most used.
                         vector<unique_ptr<Word> > sentence =
                                 findFirstWords(randomness);
-
+                    
+                        if (sentence.size() < 1)
+                            return ret;
+                    
                         while (sentence.back()->characteristics_.find(CHARACTER_ENDL)
                         == sentence.back()->characteristics_.end()) {
                                 // Get the word before the last one, so we will get a

@@ -213,7 +213,7 @@ int main (int argc, char ** argv)
 
         if (doSpeak) {
                 voice->generateSortedVector(mainWordList_);
-                for (auto& x : voice->speak(numSentences, 1, 1))
+                for (auto& x : voice->speak(numSentences, twitchRandomness, 1))
                         cout << x << endl;
         }
 
@@ -235,7 +235,7 @@ int main (int argc, char ** argv)
                         if (mainWordList_->size() > 0)
                                 twitchRandomness = mainWordList_->size() / 2;
 
-                        this_thread::sleep_for(chrono::seconds(120));
+                        this_thread::sleep_for(chrono::seconds(60));
                 }
                 // Cleanup
                 userInputLoop.join();

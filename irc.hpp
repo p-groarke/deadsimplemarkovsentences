@@ -424,7 +424,9 @@ void Irc::doUsersCharacteristics(unique_ptr<vector<unique_ptr<Word> > >& vec)
                 // Find if word is a username, needs lowercase.
                 for (const auto& name : users_) {
                         string temp = name;
-                        temp.erase(temp.size() - 5); // We know the name ends with JOIN
+
+                        if (temp.size() > 6)
+                                temp.erase(temp.size() - 5); // We know the name ends with JOIN
 
                         // Do this calculation here, not in the realtime loop.
                         string tempWord = word->word_;
@@ -434,7 +436,6 @@ void Irc::doUsersCharacteristics(unique_ptr<vector<unique_ptr<Word> > >& vec)
                                 cout << "Found name match! " << tempWord << " = " << temp << endl;
                                 word->characteristics_.insert(CHARACTER_NAME);
                                 break;
-
                         }
                 }
         }

@@ -1,0 +1,15 @@
+TODO:
+
+- Multiple channels.
+- Twitch API.
+- Expose more options for software.
+(maybe) markov chains for sentences.
+
+BUGS:
+- She learns her own sentences, giving weight to incorrect stuff!!!!
+- Speak function always outputs the same sentence.
+- Fix recursion, by detecting same pivot words.
+- Look into an empty database.
+- Save file corruption (copy backup before save).
+- If started with an empty database, will not speak even while the database is filling.
+- Doesn't identify capital letter names.
