@@ -3,10 +3,11 @@ TODO:
 - Multiple channels.
 - Twitch API.
 - Expose more options for software.
-(maybe) markov chains for sentences.
+- (maybe) markov chains for sentences (context aware).
 
 BUGS:
 - She learns her own sentences, giving weight to incorrect stuff!!!!
+-
 - Speak function always outputs the same sentence.
 - Fix recursion, by detecting same pivot words.
 - Look into an empty database.

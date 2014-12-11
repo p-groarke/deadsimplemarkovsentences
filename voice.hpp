@@ -20,13 +20,24 @@
 #ifndef VOICE_H
 #define VOICE_H
 
+#include <chrono>
 #include <memory>
+#include <random>
 
 #include "word.hpp"
 
 struct Voice {
 
-        Voice() {}
+        Voice() {
+                unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+                mersenne_gen = mt19937(seed);
+
+                randomGen = uniform_int_distribution<int>(0, 9);
+        }
+
+        void setRandom(int range) {
+                randomGen = uniform_int_distribution<int>(0, range);
+        }
 
         void setMarkov(int x) {
                 markovLength_ = x;
@@ -49,21 +60,12 @@ struct Voice {
         }
 
         // Will output the position
-        vector<unique_ptr<Word> > findFirstWords(int range) // Higher range is more random
+        vector<unique_ptr<Word> > findFirstWords() // Higher range is more random
         {
                 static int lastPos = 0; // Keep track of the last position.
 
-                if (range < 1) // Prevent crash
-                        range = 1;
-
-                int randomPos = rand() % range;
+                int randomPos = randomGen(mersenne_gen);
                 vector<unique_ptr<Word> > sentence;
-
-                // We don't want to start before the last First Word,
-                // or else we will output the same one. Only used for
-                // low randomness.
-                if (lastPos > randomPos && range == 1)
-                        randomPos = lastPos + 1;
 
                 for (int i = randomPos; i < sortedVector.size(); ++i) {
                         // Loop around if at end
@@ -82,26 +84,21 @@ struct Voice {
                 return sentence;
         }
 
-        vector<string> speak(int numSentences = 1, int randomness = 1,
+        vector<string> speak(int numSentences = 1,
                 int minWords = 3, int maxWords = 20)
         {
                 vector<string> ret;
-
-                if (randomness <= 0) { // No segfaults plz
-                        cout << "Randomness needs to be >= 1" << endl;
-                        return ret;
-                }
 
                 for (int i = 0; i < numSentences; ++i) {
 
                         string outputSentence;
                         // Get a sentence beginning in 75% most used.
                         vector<unique_ptr<Word> > sentence =
-                                findFirstWords(randomness);
-                    
+                                findFirstWords();
+
                         if (sentence.size() < 1)
                             return ret;
-                    
+
                         while (sentence.back()->characteristics_.find(CHARACTER_ENDL)
                         == sentence.back()->characteristics_.end()) {
                                 // Get the word before the last one, so we will get a
@@ -129,11 +126,10 @@ struct Voice {
                                 outputSentence += x->word_ + " ";
                         }
 
-                        cout << "MinWords: " << minWords << endl;
 
                         // For twitch, make sentences smaller. Number of words.
                         if (sentence.size() > maxWords || sentence.size() < minWords) {
-                                outputSentence = speak(1, randomness, minWords, maxWords).back();
+                                outputSentence = speak(1, minWords, maxWords).back();
                         }
                         ret.push_back(outputSentence);
                 }
@@ -142,6 +138,8 @@ struct Voice {
         }
 
         vector<unique_ptr<Word> > sortedVector;
+        mt19937 mersenne_gen;
+        uniform_int_distribution<int> randomGen;
         int markovLength_ = 3;
 };
 #endif //VOICE_H

@@ -83,6 +83,7 @@ void printHelp()
         cout << endl << "* Output:" << endl << endl;
         cout << setw(25) << left << "--speak" << "Speak to general output." << endl;
         cout << setw(25) << left << "    -n [number]" << "Generate n number of sentences (default 1)." << endl;
+        cout << setw(25) << left << "--rand [number]" << "Random range. Ex. 0.1, will choose 10% top words)." << endl;
 
         cout << endl << "* Irc:" << endl << endl;
         cout << setw(25) << left << "--irc" << "Connect to Irc." << endl;
@@ -116,10 +117,6 @@ int main (int argc, char ** argv)
                         new map<string, unique_ptr<Word> >);
         mainWordList_ = loadFile(markovLength);
 
-        int twitchRandomness = 0;
-        if (mainWordList_->size() > 0)
-                twitchRandomness = mainWordList_->size() / 2;
-
         unique_ptr<Reader> reader(new Reader());
         unique_ptr<GutenbergParser> gutenbergParser(new GutenbergParser());
 
@@ -131,7 +128,7 @@ int main (int argc, char ** argv)
                 "melinda87_2",
                 "irc.twitch.tv",
                 "#socapex",
-                "oauth:p74yztnqkje36y5a0fe2v7herwh5v7");
+                "oauth:fhj2izp4nnhbt137fga5gats3bompu");
 
         //// MENU ////
 
@@ -152,6 +149,7 @@ int main (int argc, char ** argv)
                 //Output
                 { "speak", no_argument, 0, 'S' },
                 { "n", required_argument, 0, 'n' },
+                { "rand", required_argument, 0, 'r'},
 
                 //Irc
                 { "irc", no_argument, 0, 'i' },
@@ -177,6 +175,7 @@ int main (int argc, char ** argv)
                         // Output
                         case 'n': numSentences = atoi(optarg); break;
                         case 'S': doSpeak = true; break;
+                        case 'r': voice->setRandom(mainWordList_->size() * atof(optarg)); break;
 
                         // Irc
                         case 'i': doIrc = true; break;
@@ -191,7 +190,6 @@ int main (int argc, char ** argv)
                         default: printHelp();
                 }
         }
-
 
 
         //// MAIN ////
@@ -211,9 +209,9 @@ int main (int argc, char ** argv)
                 save(mainWordList_, markovLength);
         }
 
-        if (doSpeak) {
+        if (doSpeak && !doIrc) {
                 voice->generateSortedVector(mainWordList_);
-                for (auto& x : voice->speak(numSentences, twitchRandomness, 1))
+                for (auto& x : voice->speak(numSentences, 1))
                         cout << x << endl;
         }
 
@@ -223,19 +221,15 @@ int main (int argc, char ** argv)
                 thread userInputLoop(userCommands);
 
                 while (!quitApp) {
-                        vector<string> sentences = voice->speak(1, twitchRandomness, 1);
-                        if (sentences.size() > 0)
-                                ircBot.say(sentences.back());
+                        if (doSpeak) {
+                                ircBot.say(voice->speak(numSentences, 1));
+                        }
 
                         reader->addToHugeAssWordList(ircBot.getCachedSentences());
                         reader->generateMainTree(mainWordList_, markovLength);
                         save(mainWordList_, markovLength);
 
-                        // TODO: Investigate say & processing when database is empty.
-                        if (mainWordList_->size() > 0)
-                                twitchRandomness = mainWordList_->size() / 2;
-
-                        this_thread::sleep_for(chrono::seconds(60));
+                        this_thread::sleep_for(chrono::seconds(45));
                 }
                 // Cleanup
                 userInputLoop.join();

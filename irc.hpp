@@ -46,24 +46,8 @@ public:
 
         void start();
         void say(const string& msg);
-
+        void say(const vector<string>& msg);
         unique_ptr<vector<unique_ptr<Word> > > getCachedSentences();
-
-        friend ostream& operator<<(ostream& os, const Irc& irc) {
-                return os;
-        }
-
-        friend istream& operator>>(istream& is, Irc& irc) {
-                irc.ss.str("");
-                irc.ss.clear();
-                for (auto& x : irc.sentencesToBeParsed) {
-                        irc.ss << x << " ";
-                }
-
-                irc.sentencesToBeParsed.erase(irc.sentencesToBeParsed.begin(),
-                        irc.sentencesToBeParsed.end());
-                return irc.ss;
-        }
 
         atomic<int> socket_; //socket descriptor
         atomic_bool stop = {false};
@@ -127,16 +111,26 @@ void Irc::start()
                 return;
 
         while (!stop) {
-                this_thread::sleep_for(chrono::seconds(1));
+                //this_thread::sleep_for(chrono::seconds(1));
                 for (auto& x : recvData())
                         parseOutput(x);
         }
         return;
 }
 
-void Irc::say(string const& msg)
+void Irc::say(const string& msg)
 {
         sendData(formatPrivMsg("PRIVMSG", channel_, msg));
+}
+
+void Irc::say(const vector<string>& msg)
+{
+        string out;
+        for (const auto& x : msg)
+            out += x + " ";
+
+        sendData(formatPrivMsg("PRIVMSG", channel_, out));
+
 }
 
 unique_ptr<vector<unique_ptr<Word> > > Irc::getCachedSentences()
@@ -423,17 +417,17 @@ void Irc::doUsersCharacteristics(unique_ptr<vector<unique_ptr<Word> > >& vec)
         for (auto& word : *vec) {
                 // Find if word is a username, needs lowercase.
                 for (const auto& name : users_) {
-                        string temp = name;
+                        string tempName = name;
 
-                        if (temp.size() > 6)
-                                temp.erase(temp.size() - 5); // We know the name ends with JOIN
+                        if (tempName.size() > 6)
+                                tempName.erase(tempName.size() - 5); // We know the name ends with JOIN
 
                         // Do this calculation here, not in the realtime loop.
                         string tempWord = word->word_;
                         transform(tempWord.begin(), tempWord.end(), tempWord.begin(), ::tolower);
 
-                        if (tempWord.find(temp) != string::npos) {
-                                cout << "Found name match! " << tempWord << " = " << temp << endl;
+                        if (tempName.find(tempWord) != string::npos) {
+                                cout << endl << "Found name match! " << tempWord << " = " << tempName << endl;
                                 word->characteristics_.insert(CHARACTER_NAME);
                                 break;
                         }
