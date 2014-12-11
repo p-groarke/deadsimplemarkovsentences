@@ -87,6 +87,11 @@ struct Voice {
         {
                 vector<string> ret;
 
+                if (randomness <= 0) { // No segfaults plz
+                        cout << "Randomness needs to be >= 1" << endl;
+                        return ret;
+                }
+
                 for (int i = 0; i < numSentences; ++i) {
 
                         string outputSentence;
@@ -121,10 +126,12 @@ struct Voice {
                                 outputSentence += x->word_ + " ";
                         }
 
-                        // For twitch, make sentences smaller. Number of words.
-                        if (sentence.size() > maxWords || sentence.size() < minWords)
-                                outputSentence = speak(1, randomness, minWords, maxWords).back();
+                        cout << "MinWords: " << minWords << endl;
 
+                        // For twitch, make sentences smaller. Number of words.
+                        if (sentence.size() > maxWords || sentence.size() < minWords) {
+                                outputSentence = speak(1, randomness, minWords, maxWords).back();
+                        }
                         ret.push_back(outputSentence);
                 }
 

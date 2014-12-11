@@ -30,6 +30,7 @@
 #include "word.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -37,7 +38,6 @@
 #include <memory>
 #include <sstream>
 #include <thread>
-#include <unistd.h>
 #include <vector>
 
 #ifdef __APPLE__ // TODO: Add linux
@@ -115,6 +115,10 @@ int main (int argc, char ** argv)
         unique_ptr<map<string, unique_ptr<Word> > > mainWordList_(
                         new map<string, unique_ptr<Word> >);
         mainWordList_ = loadFile(markovLength);
+
+        int twitchRandomness = 0;
+        if (mainWordList_->size() > 0)
+                twitchRandomness = mainWordList_->size() / 2;
 
         unique_ptr<Reader> reader(new Reader());
         unique_ptr<GutenbergParser> gutenbergParser(new GutenbergParser());
@@ -209,7 +213,7 @@ int main (int argc, char ** argv)
 
         if (doSpeak) {
                 voice->generateSortedVector(mainWordList_);
-                for (auto& x : voice->speak(numSentences))
+                for (auto& x : voice->speak(numSentences, 1, 1))
                         cout << x << endl;
         }
 
@@ -219,13 +223,19 @@ int main (int argc, char ** argv)
                 thread userInputLoop(userCommands);
 
                 while (!quitApp) {
-                        sleep(10);/*
-                        ircBot.say(voice->speak(1,
-                                mainWordList_->size()/1.5).back());
-*/
+                        vector<string> sentences = voice->speak(1, twitchRandomness, 1);
+                        if (sentences.size() > 0)
+                                ircBot.say(sentences.back());
+
                         reader->addToHugeAssWordList(ircBot.getCachedSentences());
                         reader->generateMainTree(mainWordList_, markovLength);
                         save(mainWordList_, markovLength);
+
+                        // TODO: Investigate say & processing when database is empty.
+                        if (mainWordList_->size() > 0)
+                                twitchRandomness = mainWordList_->size() / 2;
+
+                        this_thread::sleep_for(chrono::seconds(120));
                 }
                 // Cleanup
                 userInputLoop.join();

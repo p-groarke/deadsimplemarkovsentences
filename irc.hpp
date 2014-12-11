@@ -67,6 +67,8 @@ public:
 
         atomic<int> socket_; //socket descriptor
         atomic_bool stop = {false};
+        mutex sentences_mutex;
+        mutex users_mutex;
         string nick_;
         string address_;
         string channel_;
@@ -85,7 +87,8 @@ private:
         string formatPrivMsg(const string& command, const string& channel,
                 const string& str);
         void sendPong(const string& msg);
-        void doPart();
+        void doUsersCharacteristics(unique_ptr<vector<unique_ptr<Word> > >& vec);
+        void doUsersPart();
 
         vector<string> users_;
         vector<string> sentencesToBeParsed; // channel, sentence
@@ -140,9 +143,12 @@ unique_ptr<vector<unique_ptr<Word> > > Irc::getCachedSentences()
 {
         unique_ptr<vector<unique_ptr<Word> > > ret(new vector<unique_ptr<Word> >);
 
+        lock_guard<mutex> lk(sentences_mutex);
+
         // Lets not segfault this time
-        if (sentencesToBeParsed.size() <= 0)
+        if (sentencesToBeParsed.size() <= 0) {
                 return ret;
+        }
 
         for (auto& x : sentencesToBeParsed) {
                 stringstream ss(x);
@@ -162,7 +168,8 @@ unique_ptr<vector<unique_ptr<Word> > > Irc::getCachedSentences()
         }
 
         // Find names! And groove tonight, share the spice of life!
-        //doPart();
+        doUsersCharacteristics(ret);
+        doUsersPart();
 
         // Delete the cache of sentences.
         sentencesToBeParsed.erase(sentencesToBeParsed.begin(),
@@ -178,31 +185,35 @@ void Irc::parseOutput(const string& msg)
 {
         // Check ping: http://www.irchelp.org/irchelp/rfc/chapter4.html
         if (msg.find("PING") != string::npos) {
+                cout << "Found ping: " << msg << endl;
                 sendPong(msg);
         } else if (msg == "DISCONNECT") {
+                stop.store(true);
                 return;
         } else if (msg.find("JOIN") != string::npos
                 || msg.find("PART") != string::npos) {
 
-                cout << "START MSG " << msg << endl;
+                lock_guard<mutex> lk(users_mutex);
 
                 string x = msg;
-                x.erase(0, 1);
-                x.erase(x.find("!"));
+                x.erase(0, 1); // Remove :
+                x.erase(x.find("!")); // Extract name
                 if (msg.find("JOIN") != string::npos)
                         x += " JOIN";
                 else
-                        x += " PART";
+                        x += " PART"; // Used later for removing users
 
-                cout << " FOUND USERS " << x << endl;
+                cout << "Found user: " << msg << " ==> " << x << endl;
+
                 users_.push_back(x);
-
         } else if (msg.find("PRIVMSG") != string::npos
                 && msg.find("#") != string::npos) {
+                lock_guard<mutex> lk(sentences_mutex);
+                cout << "Found sentence: " << msg << " ==> " << formatNiceOutput(msg) << endl;
                 sentencesToBeParsed.push_back(formatNiceOutput(msg));
         } else {
                 if (msg.size() > 0)
-                        cout << msg << endl;
+                        cout << "Found other: " << msg << endl;
         }
 }
 
@@ -302,11 +313,15 @@ bool Irc::sendData(const string& msg)
 
 vector<string> Irc::recvData()
 {
+        static string lastPiece = "";
+        static int lastSize = 0;
+
         vector<string> ret;
         int numRecv;
-        char buf[MAXDATASIZE];
+
+        char buf[MAXDATASIZE] = {0};
         numRecv = recv(socket_, buf, MAXDATASIZE - 1, 0);
-        buf[numRecv]='\0';
+        //buf[numRecv]='\0';
 
         if (numRecv==0) { // Connection closed
                 cout << "---- No packets received, closing connection. ----"<< endl;
@@ -314,16 +329,30 @@ vector<string> Irc::recvData()
                 return ret;
         }
 
-        string s(buf);
-        s.resize(s.size() - 1); // Remove the \0 we had added... DONT ASK!
-        stringstream ss(s);
-        string temp;
+        string temp(buf);
+        stringstream ss(temp);
+
+        if (lastSize == MAXDATASIZE - 1) { // We had broken sentence
+                // Reconstruct broken sentence
+                getline(ss,temp,'\n');
+                ret.push_back(lastPiece + temp);
+                lastPiece = "";
+        }
+
+        // Parse the rest
         while(getline(ss, temp, '\n')) { // Chop sentences
                 // SURPRISE!!! THERE ARE STILL FUCKING CRs LEFT
                 temp.erase(std::remove(temp.begin(), temp.end(), '\r'), temp.end());
                 ret.push_back(temp);
         }
 
+
+        if (numRecv == MAXDATASIZE - 1) {
+                lastPiece = ret.back();
+                ret.pop_back();
+        }
+
+        lastSize = numRecv;
         return ret;
 }
 
@@ -382,11 +411,39 @@ void Irc::sendPong(const string& msg)
         if (sendData(response)) {
                 cout << msg << endl;
                 cout << response << endl;
+        } else {
+                cout << endl << "ERROR: Couldn't send PONG!" << endl;
         }
 }
 
-void Irc::doPart()
+void Irc::doUsersCharacteristics(unique_ptr<vector<unique_ptr<Word> > >& vec)
 {
+        lock_guard<mutex> lk(users_mutex);
+        // Each word
+        for (auto& word : *vec) {
+                // Find if word is a username, needs lowercase.
+                for (const auto& name : users_) {
+                        string temp = name;
+                        temp.erase(temp.size() - 5); // We know the name ends with JOIN
+
+                        // Do this calculation here, not in the realtime loop.
+                        string tempWord = word->word_;
+                        transform(tempWord.begin(), tempWord.end(), tempWord.begin(), ::tolower);
+
+                        if (tempWord.find(temp) != string::npos) {
+                                cout << "Found name match! " << tempWord << " = " << temp << endl;
+                                word->characteristics_.insert(CHARACTER_NAME);
+                                break;
+
+                        }
+                }
+        }
+}
+
+void Irc::doUsersPart()
+{
+        lock_guard<mutex> lk(users_mutex);
+
         for (int i = 0; i < users_.size(); ++i) {
                 if (users_[i].find("PART") != string::npos) {
                         users_[i] = users_.back();
