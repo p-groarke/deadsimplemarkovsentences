@@ -51,7 +51,7 @@ struct Word {
         Word(const string& txt) :
                 word_(txt), weight_(1) {}
 
-        // Stop at end of sentence
+        // Will naturally stop at end of chain.
         void outputTopSentence(vector<unique_ptr<Word> >& vec, float randomPercent = 0.0f) {
                 vec.push_back(unique_ptr<Word>(new Word(*this)));
 
@@ -61,8 +61,11 @@ struct Word {
                 if (chain_.size() <= 0)
                         return;
 
+                float percentageToContinue = 0.0;
+
                 vector<unique_ptr<Word> > sortedVector;
                 for (auto& x : chain_) {
+                        percentageToContinue += x.second->weight_;
                         unique_ptr<Word> temp(new Word(*x.second));
                         sortedVector.push_back(move(temp));
                 }
@@ -70,6 +73,7 @@ struct Word {
                         unique_ptr<Word>& w2) -> bool {
                         return w1->weight_ > w2->weight_;
                 });
+                percentageToContinue /= weight_;
 
                 // Pick a random word in the top x percent.
                 unsigned seed = chrono::system_clock::now().time_since_epoch().count();
@@ -81,16 +85,16 @@ struct Word {
                 int pos = distribution(generator);
                 topWord = move(sortedVector[pos]);
 
-                // If the current word ends a sentence, the top word has to at least be a
-                // 50% probability, or hits a pretty lucky draw!
-                if (characteristics_.find(CHARACTER_ENDL) != characteristics_.end()) {
-                        if (topWord->weight_ < (int)(weight_ * 0.5)) {
-                                distribution = uniform_int_distribution<int>(0, 100);
-                                int luckyThrow = distribution(generator); // Maybe we get lucky?
-                                if (luckyThrow > 100 * randomPercent) // Nope!
-                                        return; // We are a 1 word sentence, Kappa.
-                        }
-                }
+                // If the current word starts and ends a sentence, moving to another word
+                // has to be at least used 25% of times.
+                // if (characteristics_.find(CHARACTER_ENDL) != characteristics_.end()) {
+                //         if (percentageToContinue > 0.25) {
+                //                 distribution = uniform_int_distribution<int>(0, 100);
+                //                 int luckyThrow = distribution(generator); // Maybe we get lucky?
+                //                 if (luckyThrow > 100 * randomPercent) // Nope!
+                //                         return; // We are a 1 word sentence, Kappa.
+                //         }
+                // }
 
                 // Check if we have reached the end of a sentence.
                 if (topWord->characteristics_.find(CHARACTER_ENDL)
@@ -126,7 +130,11 @@ struct Word {
                 for (int i = 0; i < indent; ++i)
                         cout << "  ";
 
-                cout << "\"" << word_ << "\" " << weight_ << endl;
+                string charact;
+                for (const auto& x : characteristics_)
+                        charact += " (" + x + ")";
+
+                cout << "\"" << word_ << "\" " << weight_ << charact << endl;
 
                 for (auto& x : chain_) {
                         x.second->printInfo(indent + 1);

@@ -457,8 +457,10 @@ void Irc::doUsersCharacteristics(unique_ptr<vector<unique_ptr<Word> > >& vec)
                         string tempName = name;
                         string tempWord = word->word_;
 
-                        if (tempName[0] == '@') // remove @
-                                tempName.erase(0, 1);
+                        if (tempWord[0] == '@') // remove @
+                                tempWord.erase(0, 1);
+                        if (tempWord.find(":") != string::npos) // remove username:
+                                tempWord.erase(tempWord.find(":"), 1);
 
                         if (tempName.size() > 6)
                                 tempName.erase(tempName.size() - 5); // We know the name ends with JOIN
@@ -468,7 +470,7 @@ void Irc::doUsersCharacteristics(unique_ptr<vector<unique_ptr<Word> > >& vec)
 
                         transform(tempWord.begin(), tempWord.end(), tempWord.begin(), ::tolower);
 
-                        if (tempName.find(tempWord) != string::npos) {
+                        if (tempWord.find(tempName) != string::npos) {
                                 cout << endl << "Found name match! " << tempWord << " = " << tempName << endl;
                                 word->characteristics_.insert(CHARACTER_NAME);
                                 break;
