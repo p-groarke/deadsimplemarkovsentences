@@ -51,8 +51,10 @@ using namespace std;
 
 //// CONSTs i& globals ////
 
+string databaseFile = "data.txt";
 int markovLength = 3;
 int numSentences = 1;
+float randomRange = 0.1;
 bool doRead, doGutenberg, doSpeak, doIrc = false;
 
 atomic_bool quitApp(false); // = false; is WRONG
@@ -76,22 +78,39 @@ void printHelp()
         //Input
         cout << "* Input:" << endl << endl;
         cout << setw(25) << left << "--stdin" << "Learn from input pipe." << endl;
-        cout << setw(25) << left << "    -m [number]" << "Markov length (default 3)." << endl;
+        cout << setw(25) << left << "    --markov [number]" << "Markov length (default 3)." << endl;
         cout << setw(25) << left << "    --gutenberg" << "Clean books from Gutenberg Project." << endl;
+        cout << setw(25) << left << "    --database [filename]" << "Choose database." << endl;
 
         //Output
         cout << endl << "* Output:" << endl << endl;
         cout << setw(25) << left << "--speak" << "Speak to general output." << endl;
         cout << setw(25) << left << "    -n [number]" << "Generate n number of sentences (default 1)." << endl;
-        cout << setw(25) << left << "--rand [number]" << "Random range. Ex. 0.1, will choose 10% top words)." << endl;
+        cout << setw(25) << left << "    --rand [number]" << "Random range. Ex. 0.1, will choose 10% top words)." << endl;
 
+        //Irc
         cout << endl << "* Irc:" << endl << endl;
         cout << setw(25) << left << "--irc" << "Connect to Irc." << endl;
-        cout << setw(25) << left << "    --nick " << "Nickname and username (default Melinda87_2)." << endl;
-        cout << setw(25) << left << "    --server " << "Server address (default irc.twitch.tv)." << endl;
-        cout << setw(25) << left << "    --channel" << "Join a channel (default #socapex)." << endl;
-        cout << setw(25) << left << "    --pass" << "Server password." << endl;
+        cout << setw(25) << left << "    --nick [username]" << "Nickname and username (default Melinda87_2)." << endl;
+        cout << setw(25) << left << "    --server [address]" << "Server address (default irc.twitch.tv)." << endl;
+        cout << setw(25) << left << "    --channel [\"chan1 chan2\"]" << "Join a channel (default #socapex)." << endl;
+        cout << setw(25) << left << "    --talkon [channel]" << "Only speak on one channel." << endl;
+        cout << setw(25) << left << "    --pass [oauth:password]" << "Server password." << endl;
         cout << endl << endl;
+}
+
+void addChannels(Irc& bot, const string& chans)
+{
+    string temp;
+    stringstream ss(chans);
+    if (bot.channels_.size() > 0)
+            bot.channels_.erase(bot.channels_.begin(), bot.channels_.end());
+
+    while(ss >> temp) {
+            cout << "Adding channel: " << temp << endl;
+            bot.channels_.push_back(temp);
+    }
+
 }
 
 void userCommands()
@@ -108,25 +127,19 @@ void userCommands()
 
 int main (int argc, char ** argv)
 {
-        // Set randomness
-        srand (time(NULL));
-
         // The map is the first word, the attached map is ordered by which word
         // is used most often after it.
         unique_ptr<map<string, unique_ptr<Word> > > mainWordList_(
                         new map<string, unique_ptr<Word> >);
-        mainWordList_ = loadFile(markovLength);
 
         unique_ptr<Reader> reader(new Reader());
         unique_ptr<GutenbergParser> gutenbergParser(new GutenbergParser());
-
         unique_ptr<Voice> voice(new Voice());
-        voice->setMarkov(markovLength);
-        voice->generateSortedVector(mainWordList_);
 
         Irc ircBot = Irc(
                 "melinda87_2",
                 "irc.twitch.tv",
+                vector<string>{"#socapex"},
                 "#socapex",
                 "oauth:fhj2izp4nnhbt137fga5gats3bompu");
 
@@ -143,19 +156,21 @@ int main (int argc, char ** argv)
 
                 //Input
                 { "stdin", no_argument, 0, 's' },
-                { "m", required_argument, 0, 'm' },
+                { "markov", required_argument, 0, 'm' },
                 { "gutenberg", no_argument, 0, 'g' },
+                { "database", required_argument, 0, 'd' },
 
                 //Output
                 { "speak", no_argument, 0, 'S' },
                 { "n", required_argument, 0, 'n' },
-                { "rand", required_argument, 0, 'r'},
+                { "rand", required_argument, 0, 'r' },
 
                 //Irc
                 { "irc", no_argument, 0, 'i' },
                 { "nick", required_argument, 0, 'N' },
                 { "server", required_argument, 0, 'I' },
                 { "channel", required_argument, 0, 'c' },
+                { "talkon", required_argument, 0, 't' },
                 { "pass", required_argument, 0, 'p' }
 
         };
@@ -171,17 +186,19 @@ int main (int argc, char ** argv)
                         case 'm': markovLength = atoi(optarg); break;
                         case 's': doRead = true; break;
                         case 'g': doGutenberg = true; break;
+                        case 'd': databaseFile = string(optarg); break;
 
                         // Output
                         case 'n': numSentences = atoi(optarg); break;
                         case 'S': doSpeak = true; break;
-                        case 'r': voice->setRandom(mainWordList_->size() * atof(optarg)); break;
+                        case 'r': randomRange = atof(optarg); break;
 
                         // Irc
                         case 'i': doIrc = true; break;
                         case 'N': ircBot.nick_ = string(optarg); break;
                         case 'I': ircBot.address_ = optarg; break;
-                        case 'c': ircBot.channel_ = optarg; break;
+                        case 'c': addChannels(ircBot, string(optarg)); break;
+                        case 't': ircBot.talkChannel_ = string(optarg); break;
                         case 'p': ircBot.pass_ = optarg; break;
 
                         // Help & error
@@ -190,6 +207,17 @@ int main (int argc, char ** argv)
                         default: printHelp();
                 }
         }
+
+
+        //// INITIALIZE ////
+
+        mainWordList_ = loadFile(markovLength, databaseFile);
+        voice->setMarkov(markovLength);
+        voice->generateSortedVector(mainWordList_);
+        if (randomRange > 1.0f)
+                randomRange = 1.0f;
+
+        voice->setRandom(mainWordList_->size() * randomRange);
 
 
         //// MAIN ////
@@ -221,15 +249,15 @@ int main (int argc, char ** argv)
                 thread userInputLoop(userCommands);
 
                 while (!quitApp) {
-                        if (doSpeak) {
-                                ircBot.say(voice->speak(numSentences, 1));
-                        }
-
                         reader->addToHugeAssWordList(ircBot.getCachedSentences());
                         reader->generateMainTree(mainWordList_, markovLength);
                         save(mainWordList_, markovLength);
 
-                        this_thread::sleep_for(chrono::seconds(45));
+                        if (doSpeak) {
+                                ircBot.say(voice->speak(numSentences, 1));
+                        }
+
+                        this_thread::sleep_for(chrono::seconds(30));
                 }
                 // Cleanup
                 userInputLoop.join();

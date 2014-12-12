@@ -78,26 +78,43 @@ struct Reader {
                 }
         }
 
+        bool oneWordSentence(unique_ptr<Word>& w)
+        {
+                if (w->characteristics_.find(CHARACTER_BEGIN) !=
+                        w->characteristics_.end()
+                        && w->characteristics_.find(CHARACTER_ENDL) !=
+                        w->characteristics_.end())
+                        return true;
+
+                return false;
+        }
+
         void generateMainTree(unique_ptr<map<string, unique_ptr<Word> > >& myMap, int markovLength)
         {
                 int currentRead = 0;
                 for (auto x = hugeAssWordList_.begin(); x != hugeAssWordList_.end();) {
                         list<unique_ptr<Word> > temp;
 
-                        if (currentRead + markovLength > hugeAssWordList_.size())
-                                break;
-
-                        // Create a temporary list of n words (n == markov chain length)
-                        auto y = x;
-                        for (int i = 0; i < markovLength; ++i) {
-                                if (i == 0) {
-                                        temp.push_back(move(*x));
-                                        ++y;
-                                } else {
-                                        temp.push_back(unique_ptr<Word>(new Word(**y)));
-                                        ++y;
+                        // Still add words.
+                        if (currentRead + markovLength > hugeAssWordList_.size()) {
+                                temp.push_back(move(*x));
+                        } else {
+                                // Create a temporary list of n words (n == markov chain length)
+                                auto y = x;
+                                for (int i = 0; i < markovLength; ++i) {
+                                        if (i == 0) {
+                                                temp.push_back(move(*x));
+                                                // Dont conitnue if it is a 1 sentence sentence.
+                                                        if (oneWordSentence(temp.back()))
+                                                                break;
+                                                ++y;
+                                        } else {
+                                                temp.push_back(unique_ptr<Word>(new Word(**y)));
+                                                ++y;
+                                        }
                                 }
                         }
+
 
                         // Get the first word.
                         unique_ptr<Word> wt = move(temp.front());

@@ -39,8 +39,8 @@ const int MAXDATASIZE = 1000;
 class Irc {
 public:
         Irc(const string& nick, const string& address,
-                const string& channel, const string& pass = "",
-                const string& port = "6667");
+                const vector<string>& channels, const string& talkChannel,
+                const string& pass = "", const string& port = "6667");
         Irc(const Irc& obj);
         virtual ~Irc();
 
@@ -55,7 +55,8 @@ public:
         mutex users_mutex;
         string nick_;
         string address_;
-        string channel_;
+        string talkChannel_;
+        vector<string> channels_;
         string pass_;
         string port_;
 
@@ -84,10 +85,12 @@ private:
 //// IMPLEMENTATION ////
 
 Irc::Irc(const string& nick, const string& address,
-        const string& channel, const string& pass, const string& port) :
+        const vector<string>& channels, const string& talkChannel,
+        const string& pass, const string& port) :
         nick_(nick),
         address_(address),
-        channel_(channel),
+        channels_(channels.begin(), channels.end()),
+        talkChannel_(talkChannel),
         pass_(pass),
         port_(port)
 {}
@@ -95,7 +98,8 @@ Irc::Irc(const string& nick, const string& address,
 Irc::Irc(const Irc& obj) :
         nick_(obj.nick_),
         address_(obj.address_),
-        channel_(obj.channel_),
+        channels_(obj.channels_),
+        talkChannel_(obj.talkChannel_),
         pass_(obj.pass_),
         port_(obj.port_)
 {}
@@ -120,7 +124,7 @@ void Irc::start()
 
 void Irc::say(const string& msg)
 {
-        sendData(formatPrivMsg("PRIVMSG", channel_, msg));
+        sendData(formatPrivMsg("PRIVMSG", talkChannel_, msg));
 }
 
 void Irc::say(const vector<string>& msg)
@@ -129,7 +133,7 @@ void Irc::say(const vector<string>& msg)
         for (const auto& x : msg)
             out += x + " ";
 
-        sendData(formatPrivMsg("PRIVMSG", channel_, out));
+        sendData(formatPrivMsg("PRIVMSG", talkChannel_, out));
 
 }
 
@@ -191,6 +195,9 @@ void Irc::parseOutput(const string& msg)
 
                 string x = msg;
                 x.erase(0, 1); // Remove :
+                if (x.find("!") == string::npos) // Something went wrong, exit.
+                        return;
+
                 x.erase(x.find("!")); // Extract name
                 if (msg.find("JOIN") != string::npos)
                         x += " JOIN";
@@ -264,26 +271,37 @@ void Irc::sendConnect()
                 sendData(formatString("NICK", nick_));
                 sendData(formatString("USER", nick_));
 
-                // Recieve a response
-                for (const auto& x : recvData())
-                        cout << x;
-                sendData(formatString("JOIN", channel_));
-
         } else { // 3 recieves, then send info.
                 for (int i = 0; i < 3; ++i) {
                         for (const auto& x : recvData())
-                                cout << x;
+                                cout << x << endl;
                 }
 
                 if (!pass_.empty())
                         sendData(formatString("PASS", pass_));
                 sendData(formatString("NICK", nick_));
                 sendData(formatString("USER", nick_));
-
-                for (auto& x : recvData())
-                        cout << x;
-                sendData(formatString("JOIN", channel_));
         }
+
+        // Recieve a response
+        for (const auto& x : recvData())
+                cout << x << endl;
+
+        // Join channels
+        string channelString;
+        int i = 0;
+        for (auto x : channels_) {
+                ++i;
+                if (x[0] != '#')
+                        x.insert(0, "#");
+
+                if (i != channels_.size())
+                        x += ",";
+
+                channelString += x;
+        }
+
+        sendData(formatString("JOIN", channelString));
 }
 
 // If we find /MOTD then its ok join a channel
@@ -317,20 +335,36 @@ vector<string> Irc::recvData()
         numRecv = recv(socket_, buf, MAXDATASIZE - 1, 0);
         //buf[numRecv]='\0';
 
-        if (numRecv==0) { // Connection closed
-                cout << "---- No packets received, closing connection. ----"<< endl;
+        if (numRecv == 0) { // Connection closed
+                cout << "---- No packets received, closing connection. ----" << endl;
                 ret.push_back("DISCONNECT");
                 return ret;
         }
 
+        // if (numRecv == -1) { // No data
+        //         //cout << "---- Didn't recieve data. ----" << endl;
+        //         //ret.push_back("");
+        //         return ret;
+        // }
+
+        bool curruptedData = false;
         string temp(buf);
+
+        if (temp.size() <= 0)
+                return ret;
+
+        if (temp.back() != '\n')
+                curruptedData = true;
+
         stringstream ss(temp);
 
-        if (lastSize == MAXDATASIZE - 1) { // We had broken sentence
-                // Reconstruct broken sentence
+        if (lastPiece != "") { // Reconstruct broken sentence
                 getline(ss,temp,'\n');
+                temp.erase(std::remove(temp.begin(), temp.end(), '\r'), temp.end());
                 ret.push_back(lastPiece + temp);
                 lastPiece = "";
+
+                cout << "RECONSTRUCT: " << ret.back() << endl;
         }
 
         // Parse the rest
@@ -341,7 +375,7 @@ vector<string> Irc::recvData()
         }
 
 
-        if (numRecv == MAXDATASIZE - 1) {
+        if (numRecv == MAXDATASIZE - 1  || curruptedData) {
                 lastPiece = ret.back();
                 ret.pop_back();
         }
@@ -391,7 +425,7 @@ string Irc::formatString(const string& command, const string& str)
 string Irc::formatPrivMsg(const string& command, const string& channel,
                 const string& str)
 {
-        string ret = formatString("PRIVMSG", channel_);
+        string ret = formatString("PRIVMSG", talkChannel_);
         ret = ret.substr(0, ret.size() - 2);
         ret += " :" + str + "\r\n";
         cout << ret;
@@ -418,12 +452,17 @@ void Irc::doUsersCharacteristics(unique_ptr<vector<unique_ptr<Word> > >& vec)
                 // Find if word is a username, needs lowercase.
                 for (const auto& name : users_) {
                         string tempName = name;
+                        string tempWord = word->word_;
+
+                        if (tempName[0] == '@') // remove @
+                                tempName.erase(0, 1);
 
                         if (tempName.size() > 6)
                                 tempName.erase(tempName.size() - 5); // We know the name ends with JOIN
 
-                        // Do this calculation here, not in the realtime loop.
-                        string tempWord = word->word_;
+                        if (tempWord.size() < 5) // dont check small words. Most names > 5
+                                break;
+
                         transform(tempWord.begin(), tempWord.end(), tempWord.begin(), ::tolower);
 
                         if (tempName.find(tempWord) != string::npos) {
@@ -441,8 +480,19 @@ void Irc::doUsersPart()
 
         for (int i = 0; i < users_.size(); ++i) {
                 if (users_[i].find("PART") != string::npos) {
+                        string username = users_[i];
+                        username.erase(username.size() - 5);
+
                         users_[i] = users_.back();
                         users_.pop_back();
+
+                        users_.erase(remove_if(users_.begin(), users_.end(),
+                                [username] (const string& s) {
+                                        if (s.find(username) != string::npos)
+                                                return true;
+
+                                        return false;
+                            }), users_.end());
                 }
         }
 }

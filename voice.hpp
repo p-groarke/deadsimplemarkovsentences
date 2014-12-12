@@ -31,8 +31,6 @@ struct Voice {
         Voice() {
                 unsigned seed = chrono::system_clock::now().time_since_epoch().count();
                 mersenne_gen = mt19937(seed);
-
-                randomGen = uniform_int_distribution<int>(0, 9);
         }
 
         void setRandom(int range) {
@@ -63,8 +61,14 @@ struct Voice {
         vector<unique_ptr<Word> > findFirstWords() // Higher range is more random
         {
                 static int lastPos = 0; // Keep track of the last position.
+                static int lastRandomNumber = 0; // Don't repeat sentences.
+                int randomPos = 0;
 
-                int randomPos = randomGen(mersenne_gen);
+                do {
+                        randomPos = randomGen(mersenne_gen);
+                } while (randomPos == lastRandomNumber);
+                lastRandomNumber = randomPos;
+
                 vector<unique_ptr<Word> > sentence;
 
                 for (int i = randomPos; i < sortedVector.size(); ++i) {

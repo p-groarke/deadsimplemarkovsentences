@@ -19,6 +19,7 @@
 #ifndef LOADANDSAVE_H
 #define LOADANDSAVE_H
 
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <list>
@@ -58,10 +59,17 @@ unique_ptr<map<string, unique_ptr<Word> > > loadFile(int& markovLength, string f
         return move(myMap);
 }
 
-void save(unique_ptr<map<string, unique_ptr<Word> > >& l, int markovLength)
+void save(unique_ptr<map<string, unique_ptr<Word> > >& l, int markovLength, string f = "data.txt")
 {
+        string backupName = f;
+        backupName.insert(0, ".");
+        backupName += ".bak";
+
+        ifstream  src(backupName, std::ios::binary);
+        ofstream  dst(backupName, std::ios::binary);
+
         ofstream ofs;
-        ofs.open("data.txt", ios::out | ios::binary);
+        ofs.open(f, ios::out | ios::binary);
 
         if (!ofs.is_open())
                 return;
@@ -71,6 +79,8 @@ void save(unique_ptr<map<string, unique_ptr<Word> > >& l, int markovLength)
         for (auto& x : *l) {
                 ofs << x.first << endl << *x.second;
         }
+
+        remove(backupName.c_str());
 }
 
 #endif // LOADANDSAVE_H

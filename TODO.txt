@@ -1,16 +1,28 @@
 TODO:
-
+- Chat rate/speed detection
 - Multiple channels.
+- Moderator names add!
+- 353 == list of users
+- Sophisticated lady.
 - Twitch API.
 - Expose more options for software.
+- Disable links/stuff...
 - (maybe) markov chains for sentences (context aware).
+- adjust the speech timer based on the message frequency of the room she is in. so if no one is speaking much, melinda won't either, but if everyone is spamming then she will join in.
 
 BUGS:
+- Rebuilding packets.
+- Twitch disconnects melinda!
 - She learns her own sentences, giving weight to incorrect stuff!!!!
--
 - Speak function always outputs the same sentence.
 - Fix recursion, by detecting same pivot words.
 - Look into an empty database.
-- Save file corruption (copy backup before save).
 - If started with an empty database, will not speak even while the database is filling.
+
+DONE:
+- DONT REPEAT OR REPAURT
+- database name.
+- backup on save.
+- Save file corruption (copy backup before save).
+- Name detection.
 - Doesn't identify capital letter names.
