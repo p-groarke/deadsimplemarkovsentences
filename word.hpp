@@ -25,6 +25,8 @@
 #include <iostream>
 #include <list>
 #include <map>
+#include <math.h>
+#include <random>
 #include <unordered_set>
 #include <vector>
 
@@ -50,25 +52,53 @@ struct Word {
                 word_(txt), weight_(1) {}
 
         // Stop at end of sentence
-        void outputTopSentence(vector<unique_ptr<Word> >& vec) {
+        void outputTopSentence(vector<unique_ptr<Word> >& vec, float randomPercent = 0.0f) {
+                vec.push_back(unique_ptr<Word>(new Word(*this)));
+
                 unique_ptr<Word> topWord(new Word());
                 topWord->weight_ = 0;
 
-                vec.push_back(unique_ptr<Word>(new Word(*this)));
-                if (chain_.size() > 0) {
-                        for (auto& x : chain_) {
-                                if (x.second->weight_ > topWord->weight_)
-                                        topWord = unique_ptr<Word>(new Word(*x.second));
-                        }
+                if (chain_.size() <= 0)
+                        return;
 
-                        // Check if we have reached the end of a sentence.
-                        if (topWord->characteristics_.find(CHARACTER_ENDL)
-                        != topWord->characteristics_.end()) {
-                                vec.push_back(move(topWord));
-                                return;
-                        } else {
-                                topWord->outputTopSentence(vec);
+                vector<unique_ptr<Word> > sortedVector;
+                for (auto& x : chain_) {
+                        unique_ptr<Word> temp(new Word(*x.second));
+                        sortedVector.push_back(move(temp));
+                }
+                sort(sortedVector.begin(), sortedVector.end(), [](unique_ptr<Word>& w1,
+                        unique_ptr<Word>& w2) -> bool {
+                        return w1->weight_ > w2->weight_;
+                });
+
+                // Pick a random word in the top x percent.
+                unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+                //mersenne_gen = mt19937(seed);
+
+                int pickRange = randomPercent * chain_.size();
+                default_random_engine generator(seed);
+                uniform_int_distribution<int> distribution(0, pickRange);
+                int pos = distribution(generator);
+                topWord = move(sortedVector[pos]);
+
+                // If the current word ends a sentence, the top word has to at least be a
+                // 50% probability, or hits a pretty lucky draw!
+                if (characteristics_.find(CHARACTER_ENDL) != characteristics_.end()) {
+                        if (topWord->weight_ < (int)(weight_ * 0.5)) {
+                                distribution = uniform_int_distribution<int>(0, 100);
+                                int luckyThrow = distribution(generator); // Maybe we get lucky?
+                                if (luckyThrow > 100 * randomPercent) // Nope!
+                                        return; // We are a 1 word sentence, Kappa.
                         }
+                }
+
+                // Check if we have reached the end of a sentence.
+                if (topWord->characteristics_.find(CHARACTER_ENDL)
+                != topWord->characteristics_.end()) {
+                        vec.push_back(move(topWord));
+                        return;
+                } else {
+                        topWord->outputTopSentence(vec);
                 }
         }
 
@@ -94,7 +124,7 @@ struct Word {
 
         void printInfo(int indent = 0) {
                 for (int i = 0; i < indent; ++i)
-                        cout << " ";
+                        cout << "  ";
 
                 cout << "\"" << word_ << "\" " << weight_ << endl;
 

@@ -21,7 +21,6 @@
  * This software builds markov chains of length n.
  */
 
-#include "discussion.hpp"
 #include "gutenbergparser.hpp"
 #include "irc.hpp"
 #include "loadandsave.hpp"
@@ -54,7 +53,8 @@ using namespace std;
 string databaseFile = "data.txt";
 int markovLength = 3;
 int numSentences = 1;
-float randomRange = 0.1;
+float randomRange = 0.0;
+int sentenceDelay = 120;
 bool doRead, doGutenberg, doSpeak, doIrc = false;
 
 atomic_bool quitApp(false); // = false; is WRONG
@@ -93,9 +93,10 @@ void printHelp()
         cout << setw(25) << left << "--irc" << "Connect to Irc." << endl;
         cout << setw(25) << left << "    --nick [username]" << "Nickname and username (default Melinda87_2)." << endl;
         cout << setw(25) << left << "    --server [address]" << "Server address (default irc.twitch.tv)." << endl;
-        cout << setw(25) << left << "    --channel [\"chan1 chan2\"]" << "Join a channel (default #socapex)." << endl;
-        cout << setw(25) << left << "    --talkon [channel]" << "Only speak on one channel." << endl;
+        cout << setw(25) << left << "    --channel [\"chan1 chan2\"]" << "    Join a channel (default #socapex)." << endl;
+        cout << setw(25) << left << "    --talkon [channel]" << "Speak on this channel (default #socapex)." << endl;
         cout << setw(25) << left << "    --pass [oauth:password]" << "Server password." << endl;
+        cout << setw(25) << left << "    --delay [seconds]" << "Delay between sentences (default 2 minutes)." << endl;
         cout << endl << endl;
 }
 
@@ -171,14 +172,15 @@ int main (int argc, char ** argv)
                 { "server", required_argument, 0, 'I' },
                 { "channel", required_argument, 0, 'c' },
                 { "talkon", required_argument, 0, 't' },
-                { "pass", required_argument, 0, 'p' }
+                { "pass", required_argument, 0, 'p' },
+                { "delay", required_argument, 0, 'D' }
 
         };
 
         int option_index = 0;
 
         int opt = 0;
-        while ((opt = getopt_long(argc, argv, "hsm:gSn:iN:I:c:p:",
+        while ((opt = getopt_long(argc, argv, "hsm:gd:Sn:r:iN:I:c:t:p:D:",
                 long_options, &option_index)) != -1) {
 
                 switch (opt) {
@@ -200,6 +202,7 @@ int main (int argc, char ** argv)
                         case 'c': addChannels(ircBot, string(optarg)); break;
                         case 't': ircBot.talkChannel_ = string(optarg); break;
                         case 'p': ircBot.pass_ = optarg; break;
+                        case 'D': sentenceDelay = atoi(optarg); break;
 
                         // Help & error
                         case 'h': printHelp(); break;
@@ -217,7 +220,7 @@ int main (int argc, char ** argv)
         if (randomRange > 1.0f)
                 randomRange = 1.0f;
 
-        voice->setRandom(mainWordList_->size() * randomRange);
+        voice->setRandom(mainWordList_->size() * randomRange, randomRange);
 
 
         //// MAIN ////
@@ -254,10 +257,11 @@ int main (int argc, char ** argv)
                         save(mainWordList_, markovLength);
 
                         if (doSpeak) {
+                                voice->generateSortedVector(mainWordList_);
                                 ircBot.say(voice->speak(numSentences, 1));
                         }
 
-                        this_thread::sleep_for(chrono::seconds(30));
+                        this_thread::sleep_for(chrono::seconds(sentenceDelay));
                 }
                 // Cleanup
                 userInputLoop.join();

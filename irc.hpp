@@ -157,6 +157,9 @@ unique_ptr<vector<unique_ptr<Word> > > Irc::getCachedSentences()
                         tempSentence.push_back(unique_ptr<Word>(new Word(word)));
                 }
 
+                if (tempSentence.size() <= 0)
+                        continue;
+
                 // Since IRC doesnt necessarily have caps or . , add characters here.
                 tempSentence.front()->characteristics_.insert(CHARACTER_BEGIN);
                 tempSentence.back()->characteristics_.insert(CHARACTER_ENDL);

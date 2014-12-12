@@ -33,8 +33,9 @@ struct Voice {
                 mersenne_gen = mt19937(seed);
         }
 
-        void setRandom(int range) {
+        void setRandom(int range, float rangePercent) {
                 randomGen = uniform_int_distribution<int>(0, range);
+                randomPercent = rangePercent;
         }
 
         void setMarkov(int x) {
@@ -60,13 +61,16 @@ struct Voice {
         // Will output the position
         vector<unique_ptr<Word> > findFirstWords() // Higher range is more random
         {
-                static int lastPos = 0; // Keep track of the last position.
                 static int lastRandomNumber = 0; // Don't repeat sentences.
-                int randomPos = 0;
+                int randomPos = -1;
 
-                do {
+                if (randomGen.b() != 0) {
+                        do {
+                                randomPos = randomGen(mersenne_gen);
+                        } while (randomPos == lastRandomNumber);
+                } else {
                         randomPos = randomGen(mersenne_gen);
-                } while (randomPos == lastRandomNumber);
+                }
                 lastRandomNumber = randomPos;
 
                 vector<unique_ptr<Word> > sentence;
@@ -81,8 +85,7 @@ struct Voice {
                         == sortedVector[i]->characteristics_.end())
                                 continue;
 
-                        sortedVector[i]->outputTopSentence(sentence);
-                        lastPos = i;
+                        sortedVector[i]->outputTopSentence(sentence, randomPercent);
                         break;
                 }
                 return sentence;
@@ -145,5 +148,6 @@ struct Voice {
         mt19937 mersenne_gen;
         uniform_int_distribution<int> randomGen;
         int markovLength_ = 3;
+        float randomPercent = 0.0;
 };
 #endif //VOICE_H

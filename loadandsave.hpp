@@ -54,13 +54,14 @@ unique_ptr<map<string, unique_ptr<Word> > > loadFile(int& markovLength, string f
                         pair<string, unique_ptr<Word> >(tempKey, move(tempWord)));
         }
 
-        //for (auto& x : *myMap)
-        //        x.second->printInfo();
+        for (auto& x : *myMap)
+                x.second->printInfo();
         return move(myMap);
 }
 
 void save(unique_ptr<map<string, unique_ptr<Word> > >& l, int markovLength, string f = "data.txt")
 {
+        cout << "Saving database " << f << endl;
         string backupName = f;
         backupName.insert(0, ".");
         backupName += ".bak";
