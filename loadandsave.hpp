@@ -35,8 +35,16 @@ unique_ptr<map<string, unique_ptr<Word> > > loadFile(int& markovLength, string f
 {
         unique_ptr<map<string, unique_ptr<Word> > > myMap(
                         new map<string, unique_ptr<Word> >);
+
         ifstream ifs;
-        ifs.open(f, ios::in | ios::binary);
+        string backupFile = f;
+        backupFile.insert(0, ".");
+        backupFile += ".bak";
+
+        ifs.open(backupFile, ios::in | ios::binary);
+        if (!ifs.good()) {
+                ifs.open(f, ios::in | ios::binary);
+        }
 
         if (!ifs.is_open())
                 return move(myMap);

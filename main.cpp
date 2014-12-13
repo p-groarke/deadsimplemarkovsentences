@@ -55,7 +55,7 @@ int markovLength = 3;
 int numSentences = 1;
 float randomRange = 0.0;
 int sentenceDelay = 120;
-bool doRead, doGutenberg, doSpeak, doIrc = false;
+bool doRead, doGutenberg, doSpeak, doIrc, allChannels = false;
 
 atomic_bool quitApp(false); // = false; is WRONG
 
@@ -96,6 +96,7 @@ void printHelp()
         cout << setw(25) << left << "    --channel [\"chan1 chan2\"]" << "    Join a channel (default #socapex)." << endl;
         cout << setw(25) << left << "    --talkon [channel]" << "Speak on this channel (default #socapex)." << endl;
         cout << setw(25) << left << "    --pass [oauth:password]" << "Server password." << endl;
+        cout << setw(25) << left << "    --allChannels" << "Join all channels (doesn't work on twitch)." << endl;
         cout << setw(25) << left << "    --delay [seconds]" << "Delay between sentences (default 2 minutes)." << endl;
         cout << endl << endl;
 }
@@ -173,6 +174,7 @@ int main (int argc, char ** argv)
                 { "channel", required_argument, 0, 'c' },
                 { "talkon", required_argument, 0, 't' },
                 { "pass", required_argument, 0, 'p' },
+                { "allChannels", no_argument, 0, 'a' },
                 { "delay", required_argument, 0, 'D' }
 
         };
@@ -180,7 +182,7 @@ int main (int argc, char ** argv)
         int option_index = 0;
 
         int opt = 0;
-        while ((opt = getopt_long(argc, argv, "hsm:gd:Sn:r:iN:I:c:t:p:D:",
+        while ((opt = getopt_long(argc, argv, "hsm:gd:Sn:r:iN:I:c:t:p:aD:",
                 long_options, &option_index)) != -1) {
 
                 switch (opt) {
@@ -202,10 +204,13 @@ int main (int argc, char ** argv)
                         case 'c': addChannels(ircBot, string(optarg)); break;
                         case 't': ircBot.talkChannel_ = string(optarg); break;
                         case 'p': ircBot.pass_ = optarg; break;
+                        case 'a': allChannels = true; break;
                         case 'D': sentenceDelay = atoi(optarg); break;
 
                         // Help & error
-                        case 'h': printHelp(); break;
+                        case 'h': printHelp();
+                                return 0;
+                        break;
                         case '?': cout << "What happened?" << endl; break;
                         default: printHelp();
                 }
@@ -222,6 +227,13 @@ int main (int argc, char ** argv)
 
         voice->setRandom(mainWordList_->size() * randomRange, randomRange);
 
+        if (allChannels) {
+                if (ircBot.address_.find("twitch") != string::npos) {
+                        cout << "Twitch doesn't support the allChannels option." << endl;
+                        return 0;
+                }
+                ircBot.allChans_ = true;
+        }
 
         //// MAIN ////
 

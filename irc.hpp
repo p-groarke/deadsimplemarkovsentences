@@ -57,6 +57,7 @@ public:
         string address_;
         string talkChannel_;
         vector<string> channels_;
+        bool allChans_;
         string pass_;
         string port_;
 
@@ -74,6 +75,7 @@ private:
         void sendPong(const string& msg);
         void doUsersCharacteristics(unique_ptr<vector<unique_ptr<Word> > >& vec);
         void doUsersPart();
+        void joinAllChannels();
 
         vector<string> users_;
         vector<string> sentencesToBeParsed; // channel, sentence
@@ -113,6 +115,9 @@ void Irc::start()
 {
         if (!ircConnect())
                 return;
+
+        if (allChans_)
+                joinAllChannels();
 
         while (!stop) {
                 //this_thread::sleep_for(chrono::seconds(1));
@@ -180,6 +185,8 @@ unique_ptr<vector<unique_ptr<Word> > > Irc::getCachedSentences()
 }
 
 
+
+
 //// PRIVATE ////
 
 void Irc::parseOutput(const string& msg)
@@ -212,9 +219,50 @@ void Irc::parseOutput(const string& msg)
                 users_.push_back(x);
         } else if (msg.find("PRIVMSG") != string::npos
                 && msg.find("#") != string::npos) {
+
                 lock_guard<mutex> lk(sentences_mutex);
                 cout << "Found sentence: " << msg << " ==> " << formatNiceOutput(msg) << endl;
                 sentencesToBeParsed.push_back(formatNiceOutput(msg));
+
+        // } else if (allChans_ && msg.find("353") != string::npos) {
+
+        //         string temp = msg;
+        //         if (temp.find(" = ") != string::npos) {
+        //                 temp = temp.substr(temp.find(" = "));
+        //                 temp.erase(0, 3);
+        //                 string users = temp.substr(temp.find(" :"));
+        //                 temp = temp.erase(temp.find(" :"));
+
+        //                 stringstream ss(users);
+        //                 string singleUser;
+        //                 int numU = 0;
+        //                 while(ss >> singleUser) {
+        //                         ++numU;
+        //                 }
+
+        //                 if (numU > 10) {
+        //                         cout << "Found " << numU << " users in " << temp << ": " << users << endl;
+        //                         channels_.push_back(temp);
+        //                 }
+
+        //         } else {
+        //                 cout << "Found problem in channel: " << temp << endl;
+        //         }
+
+
+        // } else if (msg.find("/NAMES") != string::npos) {
+
+        //         string tempChan;
+        //         int i = 0;
+        //         for (auto x : channels_) {
+        //                 if (x.size() <= 0)
+        //                         continue;
+        //                 ++i;
+        //                 tempChan += x + ",";
+        //         }
+        //         tempChan.pop_back();
+        //         cout << "Sending: " << formatString("JOIN", tempChan) << endl;
+        //         sendData(formatString("JOIN", tempChan));
         } else {
                 if (msg.size() > 0)
                         cout << "Found other: " << msg << endl;
@@ -304,7 +352,8 @@ void Irc::sendConnect()
                 channelString += x;
         }
 
-        sendData(formatString("JOIN", channelString));
+        if (!allChans_)
+                sendData(formatString("JOIN", channelString));
 }
 
 // If we find /MOTD then its ok join a channel
@@ -501,5 +550,12 @@ void Irc::doUsersPart()
                 }
         }
 }
+
+void Irc::joinAllChannels()
+{
+        sendData("LIST\r\n");
+}
+
+
 
 #endif /* Irc_H_ */
