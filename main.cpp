@@ -23,7 +23,7 @@
 
 #include "gutenbergparser.hpp"
 #include "irc.hpp"
-#include "loadandsave.hpp"
+#include "database.hpp"
 #include "reader.hpp"
 #include "voice.hpp"
 #include "word.hpp"
@@ -50,12 +50,13 @@ using namespace std;
 
 //// CONSTs i& globals ////
 
-string databaseFile = "data.txt";
+string databaseFile = "data.dsmc";
+string inputFilename = "";
 int markovLength = 3;
 int numSentences = 1;
 float randomRange = 0.0;
 int sentenceDelay = 120;
-bool doRead, doGutenberg, doSpeak, doIrc, allChannels = false;
+bool doSTDINRead, doFileRead, doGutenberg, doSpeak, doIrc, allChannels = false;
 
 atomic_bool quitApp(false); // = false; is WRONG
 
@@ -78,9 +79,10 @@ void printHelp()
         //Input
         cout << "* Input:" << endl << endl;
         cout << setw(25) << left << "--stdin" << "Learn from input pipe." << endl;
+        cout << setw(25) << left << "--file [filename]" << "Learn from file." << endl;
         cout << setw(25) << left << "    --markov [number]" << "Markov length (default 3)." << endl;
         cout << setw(25) << left << "    --gutenberg" << "Clean books from Gutenberg Project." << endl;
-        cout << setw(25) << left << "    --database [filename]" << "Choose database." << endl;
+        cout << setw(25) << left << "--database [filename]" << "Choose database." << endl;
 
         //Output
         cout << endl << "* Output:" << endl << endl;
@@ -133,7 +135,7 @@ int main (int argc, char ** argv)
         // is used most often after it.
         unique_ptr<map<string, unique_ptr<Word> > > mainWordList_(
                         new map<string, unique_ptr<Word> >);
-
+        unique_ptr<Database> database(new Database());
         unique_ptr<Reader> reader(new Reader());
         unique_ptr<GutenbergParser> gutenbergParser(new GutenbergParser());
         unique_ptr<Voice> voice(new Voice());
@@ -158,6 +160,7 @@ int main (int argc, char ** argv)
 
                 //Input
                 { "stdin", no_argument, 0, 's' },
+                { "file", required_argument, 0, 'f' },
                 { "markov", required_argument, 0, 'm' },
                 { "gutenberg", no_argument, 0, 'g' },
                 { "database", required_argument, 0, 'd' },
@@ -182,13 +185,16 @@ int main (int argc, char ** argv)
         int option_index = 0;
 
         int opt = 0;
-        while ((opt = getopt_long(argc, argv, "hsm:gd:Sn:r:iN:I:c:t:p:aD:",
+        while ((opt = getopt_long(argc, argv, "hsf:m:gd:Sn:r:iN:I:c:t:p:aD:",
                 long_options, &option_index)) != -1) {
 
                 switch (opt) {
                         // Input
+                        case 's': doSTDINRead = true; break;
+                        case 'f': doFileRead = true;
+                                inputFilename = string(optarg);
+                        break;
                         case 'm': markovLength = atoi(optarg); break;
-                        case 's': doRead = true; break;
                         case 'g': doGutenberg = true; break;
                         case 'd': databaseFile = string(optarg); break;
 
@@ -217,15 +223,8 @@ int main (int argc, char ** argv)
         }
 
 
-        //// INITIALIZE ////
 
-        mainWordList_ = loadFile(markovLength, databaseFile);
-        voice->setMarkov(markovLength);
-        voice->generateSortedVector(mainWordList_);
-        if (randomRange > 1.0f)
-                randomRange = 1.0f;
-
-        voice->setRandom(mainWordList_->size() * randomRange, randomRange);
+        //// QUIT? ////
 
         if (allChannels) {
                 if (ircBot.address_.find("twitch") != string::npos) {
@@ -235,21 +234,41 @@ int main (int argc, char ** argv)
                 ircBot.allChans_ = true;
         }
 
+
+
+        //// INITIALIZE ////
+        database->inputFilename_ = inputFilename;
+        mainWordList_ = database->loadFile(markovLength, databaseFile);
+        voice->setMarkov(markovLength);
+        voice->generateSortedVector(mainWordList_);
+        if (randomRange > 1.0f)
+                randomRange = 1.0f;
+
+        voice->setRandom(mainWordList_->size() * randomRange, randomRange);
+
+
+
         //// MAIN ////
 
-        if (doGutenberg && doRead) {
-                while (cin >> *gutenbergParser >> *reader) {}
+        if (doSTDINRead) {
+                if (doGutenberg) {
+                        while (cin >> *gutenbergParser >> *reader) {}
+                } else {
+                        while (cin >> *reader) {}
+                }
                 reader->generateMainTree(mainWordList_, markovLength);
-                save(mainWordList_, markovLength);
+                database->save(mainWordList_, markovLength);
         }
 
-        if (!doGutenberg && doRead) {
-                while (cin >> *reader) {}
+        if (doFileRead) {
+                stringstream empty;
+                if (doGutenberg) {
+                        while (empty >> *database >> *gutenbergParser >> *reader) {}
+                } else {
+                        while (empty >> *database >> *reader) {}
+                }
                 reader->generateMainTree(mainWordList_, markovLength);
-                for (auto& x : *mainWordList_)
-                        cout << x.first << endl;
-
-                save(mainWordList_, markovLength);
+                database->save(mainWordList_, markovLength);
         }
 
         if (doSpeak && !doIrc) {
@@ -266,7 +285,7 @@ int main (int argc, char ** argv)
                 while (!quitApp) {
                         reader->addToHugeAssWordList(ircBot.getCachedSentences());
                         reader->generateMainTree(mainWordList_, markovLength);
-                        save(mainWordList_, markovLength);
+                        database->save(mainWordList_, markovLength);
 
                         if (doSpeak) {
                                 voice->generateSortedVector(mainWordList_);
@@ -279,7 +298,7 @@ int main (int argc, char ** argv)
                 userInputLoop.join();
                 ircBot.stop.store(true);
                 ircThread.join();
-                save(mainWordList_, markovLength);
+                database->save(mainWordList_, markovLength);
         }
 
         return 0;
