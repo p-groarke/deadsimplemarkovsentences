@@ -18,7 +18,7 @@
  */
 #pragma once
 
-#include <cstdio>
+#include <stdio.h>
 #include <fstream>
 #include <iostream>
 #include <list>
@@ -97,8 +97,10 @@ struct Database {
                 backupName.insert(0, ".");
                 backupName += ".bak";
 
-                ifstream  src(backupName, std::ios::binary);
-                ofstream  dst(backupName, std::ios::binary);
+                // Backup db in case stuff breaks
+                if (rename(f.c_str(), backupName.c_str()) != 0) {
+                        cerr << "Error renaming file " << backupName << endl;
+                }
 
                 ofstream ofs;
                 ofs.open(f, ios::out | ios::binary);
